@@ -1,0 +1,5 @@
+{
+  "name": "CryptoSignal AI - 15m Chart Analysis",
+  "description": "A professional cryptocurrency monitoring application that uses the Gemini AI to analyze 15-minute market trends and provide actionable Buy/Sell signals based on technical indicators.",
+  "requestFramePermissions": []
+}
