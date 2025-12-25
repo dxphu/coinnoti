@@ -65,7 +65,7 @@ const App: React.FC = () => {
                  `💡 *Phân tích chuyên sâu:*\n${analysis.reasoning.map(r => `• ${r}`).join('\n')}\n\n` +
                  `📉 Hỗ trợ: $${analysis.keyLevels.support.toLocaleString()}\n` +
                  `📈 Kháng cự: $${analysis.keyLevels.resistance.toLocaleString()}\n\n` +
-                 `⚠️ _Lưu ý: Luôn tuân thủ quản lý vốn (Stoploss/Take Profit)._`;
+                 `⚠️ _Lưu ý: Luôn tuân thủ quản lý vốn._`;
 
     try {
       await fetch(`https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`, {
@@ -84,7 +84,7 @@ const App: React.FC = () => {
 
   const handleTestTelegram = async () => {
     if (!tgConfig.botToken || !tgConfig.chatId) {
-      alert("Vui lòng nhập đủ Token và Chat ID trước khi test!");
+      alert("Vui lòng nhập đủ Token và Chat ID!");
       return;
     }
     setTestingTg(true);
@@ -94,27 +94,25 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: tgConfig.chatId,
-          text: "🔔 *TEST KẾT NỐI CHÀO BRO!*\n\nHệ thống CryptoSignal 15M đã kết nối thành công với Telegram của bạn. Chúc bạn trading thắng lợi! 🚀",
+          text: "🔔 *TEST KẾT NỐI CHÀO BRO!*\nHệ thống đã kết nối thành công. 🚀",
           parse_mode: 'Markdown'
         })
       });
-      if (response.ok) {
-        alert("Gửi tin nhắn test thành công! Hãy kiểm tra Telegram của bạn.");
-      } else {
-        const errorData = await response.json();
-        alert(`Lỗi Telegram: ${errorData.description || "Không xác định"}`);
-      }
+      if (response.ok) alert("Gửi test thành công!");
+      else alert("Lỗi Telegram. Kiểm tra ID và Token.");
     } catch (e) {
-      alert("Lỗi kết nối API Telegram. Hãy kiểm tra lại Token.");
+      alert("Lỗi kết nối API.");
     } finally {
       setTestingTg(false);
     }
   };
 
-  const performAnalysis = async (symbol: string, candles: any[], price: number) => {
+  const performAnalysis = async (symbol: string, candles: any[], price: number, force: boolean = false) => {
     if (candles.length === 0 || analyzing) return;
+    
     const currentCandleTime = candles[candles.length - 1].time;
-    if (currentCandleTime === lastAnalyzedCandleTime.current) return;
+    // Chỉ chặn nếu không phải bấm nút thủ công VÀ nến chưa thay đổi
+    if (!force && currentCandleTime === lastAnalyzedCandleTime.current) return;
     
     setAnalyzing(true);
     try {
@@ -124,6 +122,7 @@ const App: React.FC = () => {
       sendTelegram(result, symbol, price);
     } catch (error) {
       console.error("Analysis Error:", error);
+      alert("Lỗi khi AI phân tích. Kiểm tra API Key.");
     } finally {
       setAnalyzing(false);
     }
@@ -136,6 +135,7 @@ const App: React.FC = () => {
         fetchKlines(symbol),
         fetchPrice(symbol)
       ]);
+      
       setState(prev => ({
         ...prev,
         candles: klines,
@@ -145,11 +145,12 @@ const App: React.FC = () => {
       }));
 
       const latestCandleTime = klines[klines.length - 1].time;
+      // Chạy phân tích nếu là nến mới HOẶC người dùng bấm nút thủ công
       if (forceAnalyze || latestCandleTime !== lastAnalyzedCandleTime.current) {
-        performAnalysis(symbol, klines, ticker.price);
+        performAnalysis(symbol, klines, ticker.price, forceAnalyze);
       }
     } catch (error) {
-      setState(prev => ({ ...prev, loading: false, error: 'Lỗi kết nối sàn Binance' }));
+      setState(prev => ({ ...prev, loading: false, error: 'Lỗi Binance' }));
     }
   }, [analyzing]);
 
@@ -186,10 +187,6 @@ const App: React.FC = () => {
             <h1 className="text-2xl font-black text-white tracking-tight uppercase italic flex items-center gap-2">
               CryptoSignal <span className="text-blue-500">15M</span>
             </h1>
-            <div className="flex items-center gap-2 text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5">
-               <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-               Live Market Monitor
-            </div>
           </div>
         </div>
         
@@ -223,12 +220,7 @@ const App: React.FC = () => {
       {showSettings && (
         <div className="mb-8 p-6 bg-slate-900/90 border border-blue-600/30 rounded-3xl animate-in zoom-in duration-300">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold flex items-center gap-3 text-blue-400">
-               <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15.15-.35.24-.57.24h-1.01c-.13 0-.26.05-.36.14l-4.51 4.51c-.1.1-.23.14-.36.14h-1.01c-.44 0-.8-.36-.8-.8v-1.01c0-.13.05-.26.14-.36l4.51-4.51c.1-.1.23-.14.36-.14h1.01c.22 0 .42.09.57.24l2.04 2.04c.31.31.31.82 0 1.13z"/></svg>
-               </div>
-               Cấu hình Robot Telegram
-            </h3>
+            <h3 className="text-lg font-bold flex items-center gap-3 text-blue-400">Robot Telegram</h3>
             <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white transition-colors">Đóng [x]</button>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -240,7 +232,7 @@ const App: React.FC = () => {
                   value={tgConfig.botToken}
                   onChange={(e) => setTgConfig({...tgConfig, botToken: e.target.value})}
                   className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-2xl focus:border-blue-500 outline-none font-mono text-sm"
-                  placeholder="Dán token bot của bạn vào đây..."
+                  placeholder="Dán token bot..."
                 />
               </div>
               <div>
@@ -250,7 +242,7 @@ const App: React.FC = () => {
                   value={tgConfig.chatId}
                   onChange={(e) => setTgConfig({...tgConfig, chatId: e.target.value})}
                   className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-2xl focus:border-blue-500 outline-none font-mono text-sm"
-                  placeholder="ID chat cá nhân hoặc nhóm..."
+                  placeholder="ID chat cá nhân..."
                 />
               </div>
             </div>
@@ -263,21 +255,13 @@ const App: React.FC = () => {
                     </div>
                     <span className="font-bold text-sm">Bật thông báo tự động</span>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed italic">
-                    Chỉ gửi tin nhắn khi có tín hiệu MUA hoặc BÁN mạnh.
-                  </p>
                </div>
                <button
                   onClick={handleTestTelegram}
                   disabled={testingTg}
                   className="mt-4 w-full py-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-blue-400 font-bold text-xs uppercase tracking-widest rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-2"
                >
-                  {testingTg ? (
-                    <div className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/></svg>
-                  )}
-                  Gửi tin nhắn test ngay
+                  {testingTg ? 'Đang gửi...' : 'Gửi tin nhắn test ngay'}
                </button>
             </div>
           </div>
@@ -302,9 +286,8 @@ const App: React.FC = () => {
         <div className="bg-slate-900/50 p-5 rounded-3xl border border-slate-800 flex items-center justify-between">
            <div>
               <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Trạng thái AI</p>
-              <p className="text-sm font-bold uppercase">{analyzing ? 'Đang quét sóng...' : 'Sẵn sàng'}</p>
+              <p className="text-sm font-bold uppercase">{analyzing ? 'Đang quét...' : 'Sẵn sàng'}</p>
            </div>
-           {analyzing && <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />}
         </div>
       </div>
 
@@ -312,64 +295,35 @@ const App: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           <Chart data={state.candles} analysis={state.lastAnalysis} />
           <div className="bg-blue-900/10 border border-blue-900/30 p-6 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
-             <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center text-blue-400">
-                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                   </svg>
-                </div>
-                <div>
-                   <p className="font-bold text-white text-sm">Chế độ quét sóng chủ động (15-min Intervals)</p>
-                   <p className="text-xs text-slate-500">Tự động kích hoạt AI ngay khi nến đóng.</p>
-                </div>
+             <div>
+                <p className="font-bold text-white text-sm">Chế độ quét sóng 15 phút</p>
+                <p className="text-xs text-slate-500">Bấm nút để ép buộc AI phân tích lại ngay lập tức.</p>
              </div>
              <button
                onClick={() => loadData(state.symbol, true)}
                disabled={analyzing}
-               className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95"
+               className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
              >
-               {analyzing ? 'Đang quét...' : 'Phân tích thủ công'}
+               {analyzing ? 'Đang quét AI...' : 'Phân tích thủ công'}
              </button>
           </div>
         </div>
 
         <div className="space-y-6">
-          <h2 className="text-lg font-black text-white uppercase tracking-tighter flex items-center gap-3">
-             <div className="w-1 h-6 bg-blue-600 rounded-full" />
-             Khuyến nghị trading
-          </h2>
-          {!state.lastAnalysis && !analyzing && (
-            <div className="bg-slate-900/40 border border-dashed border-slate-800 rounded-3xl p-12 text-center">
-              <p className="text-slate-500 text-sm italic">Đang chờ nến đóng hoặc nhấn Phân tích thủ công...</p>
-            </div>
-          )}
-          {analyzing && (
+          <h2 className="text-lg font-black text-white uppercase">Khuyến nghị</h2>
+          {analyzing ? (
             <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-12 text-center animate-pulse">
-               <div className="flex justify-center gap-2 mb-4">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:0.2s]" />
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:0.4s]" />
-               </div>
-               <p className="text-blue-400 font-bold text-sm uppercase tracking-widest">AI đang quét các chỉ số...</p>
+               <p className="text-blue-400 font-bold text-sm uppercase tracking-widest">Đang tính toán...</p>
             </div>
-          )}
-          {state.lastAnalysis && !analyzing && (
+          ) : state.lastAnalysis ? (
             <SignalCard analysis={state.lastAnalysis} />
-          )}
-          {tgConfig.isEnabled && (
-            <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex items-center gap-3">
-               <div className="w-2 h-2 rounded-full bg-emerald-500" />
-               <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Đang trực Telegram 24/7</span>
+          ) : (
+            <div className="bg-slate-900/40 border border-dashed border-slate-800 rounded-3xl p-12 text-center text-slate-500 text-sm">
+              Chưa có dữ liệu phân tích.
             </div>
           )}
         </div>
       </div>
-
-      <footer className="mt-16 pt-8 border-t border-slate-900 text-center">
-         <p className="text-[10px] text-slate-600 uppercase font-black tracking-widest">
-            Hệ thống phân tích dựa trên thuật toán AI - Không phải lời khuyên đầu tư tài chính
-         </p>
-      </footer>
     </div>
   );
 };
