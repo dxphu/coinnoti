@@ -5,7 +5,7 @@ services:
     container_name: crypto_ai_app
     image: cryptosignal:latest
     ports:
-      - "20000:80"
+      - "20000:20000"
     environment:
       # Thay Key thật của bạn vào đây
       - API_KEY=AIzaSyCpyPu6zZAbj4ZVafQhXq_QzucoMoA2dU8
