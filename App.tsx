@@ -286,7 +286,7 @@ const App: React.FC = () => {
             </div>
             <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800 md:col-span-2">
               <div className="flex-1">
-                <p className="text-sm font-bold">Lọc tín hiệu VIP (>75%)</p>
+                <p className="text-sm font-bold">Lọc tín hiệu VIP lớn hơn (75%)</p>
                 <p className="text-xs text-slate-500">Chỉ gửi Telegram khi AI xác nhận nến 5p có độ tin cậy cực cao.</p>
               </div>
               <button 
