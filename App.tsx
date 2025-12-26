@@ -15,22 +15,24 @@ interface SignalLog {
 }
 
 const App: React.FC = () => {
-  const [state, setState] = useState<MarketState>({
-    symbol: 'BTC',
+  // 1. Tải Watchlist trước để lấy đồng coin mặc định
+  const [watchlist, setWatchlist] = useState<string[]>(() => {
+    const saved = localStorage.getItem('crypto_watchlist');
+    return saved ? JSON.parse(saved) : ['BTC', 'ETH', 'SOL', 'NEAR', 'DOGE'];
+  });
+
+  // 2. Khởi tạo state với symbol là phần tử đầu tiên của watchlist
+  const [state, setState] = useState<MarketState>(() => ({
+    symbol: watchlist[0] || 'BTC',
     price: 0,
     change24h: 0,
     candles: [],
     lastAnalysis: null,
     loading: true,
     error: null,
-  });
+  }));
 
-  const [watchlist, setWatchlist] = useState<string[]>(() => {
-    const saved = localStorage.getItem('crypto_watchlist');
-    return saved ? JSON.parse(saved) : ['BTC', 'ETH', 'SOL', 'NEAR', 'DOGE'];
-  });
   const [newSymbol, setNewSymbol] = useState('');
-  
   const [analyzing, setAnalyzing] = useState(false);
   const [isTestingTg, setIsTestingTg] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -169,8 +171,8 @@ const App: React.FC = () => {
     for (const s of watchlist) {
       if (isUserSwitching.current) break;
       await loadData(s, s !== currentSymbolRef.current);
-      // Chờ lâu hơn giữa các coin: 10 giây để an toàn nhất với gói miễn phí
-      await new Promise(r => setTimeout(r, 10000)); 
+      // Giãn cách 12s để cực kỳ an toàn với Rate Limit (5 requests/phút)
+      await new Promise(r => setTimeout(r, 12000)); 
     }
     setAnalyzing(false);
   }, [watchlist, analyzing]);
@@ -209,7 +211,8 @@ const App: React.FC = () => {
   const addToWatchlist = () => {
     const sym = newSymbol.toUpperCase().trim().replace('USDT', '');
     if (sym && !watchlist.includes(sym)) {
-      setWatchlist(prev => [...prev, sym]);
+      const newWatchlist = [...watchlist, sym];
+      setWatchlist(newWatchlist);
       setNewSymbol('');
       setState(p => ({ ...p, symbol: sym }));
     }
@@ -219,69 +222,71 @@ const App: React.FC = () => {
     e.stopPropagation();
     const newWatchlist = watchlist.filter(s => s !== sym);
     setWatchlist(newWatchlist);
-    if (state.symbol === sym && newWatchlist.length > 0) {
-      setState(p => ({ ...p, symbol: newWatchlist[0] }));
-    } else if (newWatchlist.length === 0) {
-      setWatchlist(['BTC']);
-      setState(p => ({ ...p, symbol: 'BTC' }));
+    
+    // Nếu xóa đồng đang xem, chọn đồng đầu tiên trong danh sách mới
+    if (state.symbol === sym) {
+      if (newWatchlist.length > 0) {
+        setState(p => ({ ...p, symbol: newWatchlist[0] }));
+      } else {
+        // Nếu xóa hết, mặc định về BTC
+        setWatchlist(['BTC']);
+        setState(p => ({ ...p, symbol: 'BTC' }));
+      }
     }
   };
 
-  // Hàm helper để render thông tin lỗi AI đẹp mắt
   const renderAiError = () => {
     if (!aiError) return null;
 
     let displayMsg = aiError;
+    let errorCode = "API_ERR";
     let isRateLimit = aiError.includes("429") || aiError.includes("RESOURCE_EXHAUSTED");
-    let errorCode = "ERR";
     
     try {
-      // Thử parse nếu lỗi là JSON string
+      // Thử parse JSON lỗi từ service trả về
       const parsed = JSON.parse(aiError);
       if (parsed.error) {
         displayMsg = parsed.error.message;
-        errorCode = parsed.error.code || parsed.error.status || "ERR";
+        errorCode = parsed.error.code || "ERR";
       }
-    } catch (e) {}
+    } catch (e) {
+      // Nếu không phải JSON, tìm mã lỗi HTTP trong chuỗi
+      const codeMatch = aiError.match(/(\d{3})/);
+      if (codeMatch) errorCode = codeMatch[1];
+    }
 
     return (
-      <div className={`mb-6 p-4 rounded-2xl border transition-all ${isRateLimit ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' : 'bg-rose-500/10 border-rose-500/30 text-rose-500'}`}>
-        <div className="flex items-start gap-3">
-          <div className={`mt-0.5 p-1.5 rounded-lg ${isRateLimit ? 'bg-amber-500/20' : 'bg-rose-500/20'}`}>
+      <div className={`mb-6 p-4 rounded-2xl border transition-all animate-in slide-in-from-top-4 ${isRateLimit ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' : 'bg-rose-500/10 border-rose-500/30 text-rose-500'}`}>
+        <div className="flex items-start gap-4">
+          <div className={`mt-1 p-2 rounded-xl ${isRateLimit ? 'bg-amber-500/20' : 'bg-rose-500/20'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1">
-              <span className="text-[10px] font-black uppercase tracking-wider">
-                {isRateLimit ? 'CẢNH BÁO QUOTA (RATE LIMIT)' : 'LỖI HỆ THỐNG AI'}
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
+                {isRateLimit ? 'Vượt quá giới hạn (Rate Limit)' : 'Lỗi kết nối Gemini'}
               </span>
-              <span className="text-[9px] font-mono bg-black/30 px-1.5 py-0.5 rounded">CODE: {errorCode}</span>
+              <span className="text-[9px] font-mono font-bold bg-black/40 px-2 py-0.5 rounded border border-white/5">CODE: {errorCode}</span>
             </div>
-            <p className="text-xs font-bold leading-relaxed">{displayMsg}</p>
+            <p className="text-xs font-bold leading-relaxed break-words">{displayMsg}</p>
             
             <button 
               onClick={() => setShowErrorDetail(!showErrorDetail)}
-              className="mt-3 text-[9px] font-black uppercase tracking-tighter hover:underline opacity-70"
+              className="mt-3 text-[9px] font-black uppercase tracking-widest hover:underline opacity-60 flex items-center gap-1"
             >
-              {showErrorDetail ? 'Ẩn chi tiết kỹ thuật' : 'Xem chi tiết kỹ thuật'}
+              {showErrorDetail ? 'Đóng chi tiết' : 'Xem mã lỗi gốc'}
+              <svg className={`w-3 h-3 transition-transform ${showErrorDetail ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
             
             {showErrorDetail && (
-              <div className="mt-2 p-3 bg-black/40 rounded-xl font-mono text-[9px] overflow-x-auto whitespace-pre-wrap break-all border border-white/5">
+              <div className="mt-3 p-3 bg-black/40 rounded-xl font-mono text-[9px] overflow-x-auto whitespace-pre-wrap border border-white/5 text-slate-400">
                 {aiError}
               </div>
             )}
           </div>
         </div>
-        
-        {isRateLimit && (
-          <div className="mt-4 flex items-center gap-2 text-[10px] bg-amber-500/10 p-2 rounded-xl border border-amber-500/20">
-            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-            <span className="font-medium italic">Hệ thống đang tự động giãn thời gian quét. Vui lòng không F5 liên tục.</span>
-          </div>
-        )}
       </div>
     );
   };
@@ -296,8 +301,8 @@ const App: React.FC = () => {
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-black text-white tracking-tight italic uppercase">ScalpPro <span className="text-emerald-400">5M/15M</span></h1>
-            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">AI Technical Analysis</p>
+            <h1 className="text-2xl font-black text-white tracking-tight italic uppercase">ScalpPro <span className="text-emerald-400">AI</span></h1>
+            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">Advanced Market Analysis</p>
           </div>
         </div>
         
@@ -307,7 +312,7 @@ const App: React.FC = () => {
               type="text" 
               value={newSymbol}
               onChange={(e) => setNewSymbol(e.target.value)}
-              placeholder="Thêm Coin..."
+              placeholder="Thêm mã coin..."
               className="bg-transparent text-xs font-bold outline-none w-24 text-emerald-400 placeholder:text-slate-600"
               onKeyDown={(e) => e.key === 'Enter' && addToWatchlist()}
             />
@@ -321,7 +326,7 @@ const App: React.FC = () => {
                 key={sym}
                 onClick={() => setState(p => ({...p, symbol: sym}))}
                 className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black transition-all border cursor-pointer ${
-                  state.symbol === sym ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                  state.symbol === sym ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600 shadow-sm'
                 }`}
               >
                 {sym}
@@ -344,7 +349,7 @@ const App: React.FC = () => {
         <div className="mb-8 p-6 bg-slate-900 border border-emerald-600/30 rounded-3xl animate-in zoom-in duration-300 shadow-2xl">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1">
-              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Bot Token</label>
+              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Telegram Bot Token</label>
               <input 
                 type="password" 
                 value={tgConfig.botToken} 
@@ -354,7 +359,7 @@ const App: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Chat ID</label>
+              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Telegram Chat ID</label>
               <input 
                 type="text" 
                 value={tgConfig.chatId} 
@@ -365,8 +370,8 @@ const App: React.FC = () => {
             </div>
             <div className="md:col-span-2 flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
                <div>
-                 <span className="text-sm font-bold block">Thông báo Telegram VIP</span>
-                 <span className="text-[10px] text-slate-500">Chỉ gửi kèo đẹp (Confidence  75%)</span>
+                 <span className="text-sm font-bold block">Thông báo Telegram</span>
+                 <span className="text-[10px] text-slate-500">Chỉ gửi các tín hiệu có độ tin cậy > 75%</span>
                </div>
                <button 
                   onClick={() => setTgConfig({...tgConfig, isEnabled: !tgConfig.isEnabled})}
@@ -375,8 +380,8 @@ const App: React.FC = () => {
                   <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${tgConfig.isEnabled ? 'left-7' : 'left-1'}`} />
                </button>
             </div>
-            <button onClick={testTelegram} disabled={isTestingTg} className="md:col-span-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 p-3 rounded-xl font-black text-xs transition-all">
-              {isTestingTg ? 'ĐANG GỬI...' : 'TEST GỬI TIN NHẮN'}
+            <button onClick={testTelegram} disabled={isTestingTg} className="md:col-span-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 p-3 rounded-xl font-black text-xs transition-all shadow-lg shadow-emerald-900/20">
+              {isTestingTg ? 'ĐANG GỬI THỬ...' : 'GỬI TIN NHẮN THỬ NGHIỆM'}
             </button>
           </div>
         </div>
@@ -387,24 +392,24 @@ const App: React.FC = () => {
       {renderAiError()}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
-           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Cặp hiện tại</p>
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Mã đang xem</p>
            <p className="text-2xl font-mono font-black text-white">{state.symbol}/USDT</p>
         </div>
-        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Giá Binance</p>
            <p className="text-xl font-mono font-bold text-white">${state.price.toLocaleString()}</p>
         </div>
-        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
-           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Chu kỳ quét tiếp (15m)</p>
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Quét chu kỳ 15m</p>
            <p className="text-2xl font-mono font-bold text-emerald-400">{nextScanTime}</p>
         </div>
-        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
-           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Scanner AI 5M</p>
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Trạng thái Scanner</p>
            <p className={`text-sm font-bold uppercase flex items-center gap-2 ${analyzing ? 'text-amber-500' : 'text-emerald-500'}`}>
              {analyzing ? (
-               <><span className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />Đang quét...</>
-             ) : 'Hoạt động'}
+               <><span className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />Đang phân tích...</>
+             ) : 'Sẵn sàng'}
            </p>
         </div>
       </div>
@@ -413,33 +418,36 @@ const App: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           <Chart data={state.candles} analysis={state.lastAnalysis} />
           
-          <div className="bg-slate-900/30 rounded-3xl border border-slate-800/50 p-6 backdrop-blur-sm">
+          <div className="bg-slate-900/30 rounded-3xl border border-slate-800/50 p-6 backdrop-blur-sm shadow-xl">
             <h3 className="text-sm font-black uppercase text-slate-400 mb-6 flex justify-between">
-              Lịch sử tín hiệu 5M (Quét 15m)
-              <span className="text-[9px] text-slate-600 italic">Scalping Focus</span>
+              Nhật ký tín hiệu gần đây
+              <span className="text-[9px] text-slate-600 italic">Dữ liệu 5M nạp mỗi 15M</span>
             </h3>
-            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
               {signalLogs.length > 0 ? signalLogs.map((log, i) => (
                 <div 
                   key={i} 
-                  className="flex items-center justify-between p-4 bg-slate-950/40 rounded-2xl border border-slate-800 hover:border-emerald-500/50 transition-all cursor-pointer"
+                  className="flex items-center justify-between p-4 bg-slate-950/40 rounded-2xl border border-slate-800 hover:border-emerald-500/50 transition-all cursor-pointer group"
                   onClick={() => setState(p => ({...p, symbol: log.symbol}))}
                 >
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${log.signal === 'BUY' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>{log.signal[0]}</div>
                     <div>
-                      <p className="font-black text-white">{log.symbol} <span className="text-[10px] text-slate-500 ml-2 font-normal">{log.time}</span></p>
-                      <p className={`text-[10px] font-black ${log.signal === 'BUY' ? 'text-emerald-500' : 'text-rose-500'}`}>CONFIDENCE: {log.confidence}%</p>
+                      <p className="font-black text-white group-hover:text-emerald-400 transition-colors">{log.symbol} <span className="text-[10px] text-slate-500 ml-2 font-normal">{log.time}</span></p>
+                      <p className={`text-[10px] font-black ${log.signal === 'BUY' ? 'text-emerald-500' : 'text-rose-500'}`}>TIN CẬY: {log.confidence}%</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-xs font-mono font-bold text-white">${log.price.toLocaleString()}</p>
-                    <p className="text-[9px] text-slate-600 font-bold uppercase tracking-tighter">Xem biểu đồ</p>
+                    <p className="text-[9px] text-slate-600 font-bold uppercase tracking-tighter">Bấm để xem chart</p>
                   </div>
                 </div>
               )) : (
-                <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl">
-                   <p className="text-slate-600 text-sm italic">Đang chờ tín hiệu 5M mới...</p>
+                <div className="text-center py-16 border border-dashed border-slate-800 rounded-3xl bg-black/10">
+                   <div className="mb-3 opacity-20 flex justify-center">
+                      <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                   </div>
+                   <p className="text-slate-600 text-sm font-medium">Chưa có tín hiệu nào được ghi nhận...</p>
                 </div>
               )}
             </div>
@@ -448,18 +456,18 @@ const App: React.FC = () => {
 
         <div className="space-y-6">
           <h2 className="text-lg font-black text-white uppercase flex items-center gap-3">
-            <span className="w-1.5 h-6 bg-emerald-600 rounded-full" /> AI Phân tích 5M: {state.symbol}
+            <span className="w-1.5 h-6 bg-emerald-600 rounded-full" /> Phân tích AI: {state.symbol}
           </h2>
           {state.loading ? (
-            <div className="bg-slate-900/30 border border-slate-800 rounded-3xl p-16 text-center shadow-inner">
-               <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
-               <p className="text-emerald-500 font-black text-xs uppercase tracking-widest">Tải dữ liệu 5M...</p>
+            <div className="bg-slate-900/30 border border-slate-800 rounded-3xl p-20 text-center shadow-inner backdrop-blur-sm">
+               <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto mb-6" />
+               <p className="text-emerald-500 font-black text-xs uppercase tracking-widest animate-pulse">Đang nạp dữ liệu kỹ thuật...</p>
             </div>
           ) : state.lastAnalysis ? (
             <SignalCard analysis={state.lastAnalysis} />
           ) : (
-            <div className="bg-slate-900/30 border border-dashed border-slate-800 rounded-3xl p-12 text-center text-slate-500">
-              Đang chờ dữ liệu nến 5M mới...
+            <div className="bg-slate-900/30 border border-dashed border-slate-800 rounded-3xl p-16 text-center text-slate-500 backdrop-blur-sm">
+              <p className="italic">Đang đợi kết quả phân tích nến mới từ Gemini...</p>
             </div>
           )}
         </div>

@@ -4,11 +4,18 @@ import { CandleData, AnalysisResponse } from "../types";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export const analyzeMarket = async (symbol: string, candles: CandleData[], retries = 2): Promise<AnalysisResponse> => {
+export const analyzeMarket = async (symbol: string, candles: CandleData[], retries = 1): Promise<AnalysisResponse> => {
+  // Luôn lấy API_KEY từ process.env theo quy định bảo mật
   const apiKey = 'AIzaSyCzk9WrtTRQe1xsffRMk68ytP6EsrFdfPo';
   
   if (!apiKey) {
-    throw new Error("{\"error\":{\"code\": 401, \"message\": \"API_KEY chưa được cấu hình trong môi trường.\", \"status\": \"UNAUTHENTICATED\"}}");
+    throw new Error(JSON.stringify({
+      error: {
+        code: 401,
+        message: "API_KEY chưa được cấu hình. Vui lòng kiểm tra file index.html hoặc Docker.",
+        status: "UNAUTHENTICATED"
+      }
+    }));
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -27,8 +34,7 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[], retri
   
   CHIẾN THUẬT:
   - Tập trung vào Price Action, RSI và các vùng Hỗ trợ/Kháng cự trên khung 5M.
-  - Mặc dù dữ liệu là 5M, hãy đưa ra chiến thuật giao dịch phù hợp để giữ lệnh trong khoảng 15-45 phút.
-  - Chỉ đưa ra độ tin cậy (confidence) cao nếu các chỉ báo hội tụ mạnh mẽ.
+  - Đưa ra chiến thuật giao dịch phù hợp để giữ lệnh trong khoảng 15-45 phút.
 
   YÊU CẦU TRẢ VỀ JSON:
   1. signal: BUY, SELL hoặc NEUTRAL.
@@ -87,26 +93,25 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[], retri
       const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
       return JSON.parse(cleanJson) as AnalysisResponse;
     } catch (e: any) {
-      // Chuyển đổi lỗi thành chuỗi JSON để App.tsx có thể parse và hiển thị chi tiết
-      let errorDetail = "";
+      let rawError = "";
       try {
-        // Một số lỗi từ SDK có cấu trúc lồng nhau
-        errorDetail = e.message || JSON.stringify(e);
-      } catch (parseErr) {
-        errorDetail = String(e);
+        rawError = e.message || JSON.stringify(e);
+      } catch {
+        rawError = String(e);
       }
 
-      const isRateLimit = errorDetail.includes("429") || errorDetail.includes("RESOURCE_EXHAUSTED");
+      const isRateLimit = rawError.includes("429") || rawError.includes("RESOURCE_EXHAUSTED");
       
       if (isRateLimit && i < retries) {
-        const waitTime = (i + 1) * 6000;
-        console.warn(`Đụng giới hạn (429) cho ${symbol}. Thử lại sau ${waitTime}ms... (${i + 1}/${retries})`);
+        const waitTime = (i + 1) * 5000;
+        console.warn(`Đang thử lại sau lỗi 429... (${i+1}/${retries+1})`);
         await sleep(waitTime);
         continue;
       }
       
-      throw new Error(errorDetail);
+      // Đảm bảo lỗi ném ra là một chuỗi có thể chứa thông tin hữu ích cho UI
+      throw new Error(rawError);
     }
   }
-  throw new Error("Đã thử lại nhiều lần nhưng vẫn gặp lỗi kết nối AI.");
+  throw new Error("Không thể kết nối với Gemini sau nhiều lần thử.");
 };
