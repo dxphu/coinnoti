@@ -5,7 +5,7 @@ import { CandleData, AnalysisResponse } from "../types";
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const analyzeMarket = async (symbol: string, candles: CandleData[], retries = 2): Promise<AnalysisResponse> => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = 'AIzaSyCzk9WrtTRQe1xsffRMk68ytP6EsrFdfPo';
   
   if (!apiKey) {
     throw new Error("{\"error\":{\"code\": 401, \"message\": \"API_KEY chưa được cấu hình trong môi trường.\", \"status\": \"UNAUTHENTICATED\"}}");
