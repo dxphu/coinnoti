@@ -4,7 +4,7 @@ import { CandleData, AnalysisResponse } from "../types";
 export const analyzeMarket = async (symbol: string, candles: CandleData[]): Promise<AnalysisResponse> => {
   // Use process.env.API_KEY as per guidelines. 
   // Our Docker build maps this to window.APP_CONFIG.API_KEY for runtime flexibility.
-  const apiKey = process.env.API_KEY;
+  const apiKey = 'AIzaSyCpyPu6zZAbj4ZVafQhXq_QzucoMoA2dU8';
   
   if (!apiKey || apiKey === "__API_KEY_PLACEHOLDER__" || apiKey === "undefined") {
     console.error("Critical: API_KEY is missing in the browser environment.");
