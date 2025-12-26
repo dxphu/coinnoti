@@ -4,8 +4,8 @@ services:
     build: .
     container_name: crypto_ai_app
     ports:
-      - "20000:20000"
+      - "20000:80"
     environment:
-      # LƯU Ý: Thay thế bằng API Key Gemini thật của bạn
+      # Thay Key thật của bạn vào đây
       - API_KEY=AIzaSyCpyPu6zZAbj4ZVafQhXq_QzucoMoA2dU8
     restart: always

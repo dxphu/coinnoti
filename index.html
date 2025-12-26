@@ -15,10 +15,12 @@
             margin: 0;
         }
     </style>
-    <!-- Placeholder cho Docker Runtime Injection -->
+    <!-- Shim cho process.env.API_KEY - Docker sẽ thay thế __API_KEY_PLACEHOLDER__ lúc runtime -->
     <script>
-      window.APP_CONFIG = {
-        API_KEY: "__API_KEY_PLACEHOLDER__"
+      window.process = {
+        env: {
+          API_KEY: "AIzaSyCpyPu6zZAbj4ZVafQhXq_QzucoMoA2dU8"
+        }
       };
     </script>
 <script type="importmap">
