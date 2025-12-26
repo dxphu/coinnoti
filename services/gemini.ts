@@ -19,7 +19,7 @@ export const analyzeMarket = async (
   candles: CandleData[], 
   preferredModel: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<AnalysisResponse> => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = "AIzaSyCzk9WrtTRQe1xsffRMk68ytP6EsrFdfPo";
   
   if (!apiKey) {
     throw new Error("Lỗi: API_KEY chưa được thiết lập.");
