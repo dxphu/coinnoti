@@ -410,7 +410,7 @@ const App: React.FC = () => {
           <div className="bg-slate-900/30 rounded-3xl border border-slate-800/50 p-6 backdrop-blur-sm">
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex justify-between items-center">
               Tín hiệu VIP đã lọc
-              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Accuracy > 75%</span>
+              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Accuracy  75%</span>
             </h3>
             <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
               {signalLogs.length > 0 ? signalLogs.map((log, i) => (
