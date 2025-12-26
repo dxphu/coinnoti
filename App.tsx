@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [newSymbol, setNewSymbol] = useState('');
   
   const [analyzing, setAnalyzing] = useState(false);
+  const [isTestingTg, setIsTestingTg] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [nextScanTime, setNextScanTime] = useState<string>('--:--');
   const [signalLogs, setSignalLogs] = useState<SignalLog[]>([]);
@@ -50,6 +51,36 @@ const App: React.FC = () => {
     const nextClose = new Date(now);
     nextClose.setMinutes(nextFive, 0, 0);
     return nextClose;
+  };
+
+  const testTelegram = async () => {
+    if (!tgConfig.botToken || !tgConfig.chatId) {
+      alert("Vui lòng nhập đầy đủ Token và Chat ID!");
+      return;
+    }
+    setIsTestingTg(true);
+    try {
+      const text = `🔔 *KIỂM TRA KẾT NỐI*\n\nHệ thống ScalpPro 5M đã kết nối thành công với Telegram của bạn!\nTín hiệu sẽ được gửi tại đây khi có kèo > 75%.`;
+      const res = await fetch(`https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: tgConfig.chatId,
+          text: text,
+          parse_mode: 'Markdown'
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert("Gửi tin nhắn test thành công! Hãy kiểm tra Telegram.");
+      } else {
+        throw new Error(data.description || "Lỗi không xác định");
+      }
+    } catch (e: any) {
+      alert(`Lỗi kết nối Telegram: ${e.message}`);
+    } finally {
+      setIsTestingTg(false);
+    }
   };
 
   const sendTelegram = async (analysis: AnalysisResponse, symbol: string, price: number) => {
@@ -108,7 +139,6 @@ const App: React.FC = () => {
 
       const latestTime = klines[klines.length - 1].time;
       
-      // Nếu là nến mới hoặc chưa có phân tích cho coin này
       if (latestTime !== lastAnalyzedMap.current[symbol]) {
         const result = await analyzeMarket(symbol, klines);
         lastAnalyzedMap.current[symbol] = latestTime;
@@ -194,7 +224,6 @@ const App: React.FC = () => {
     if (sym && !watchlist.includes(sym)) {
       setWatchlist(prev => [...prev, sym]);
       setNewSymbol('');
-      // Chuyển sang xem coin mới ngay lập tức
       setState(prev => ({ ...prev, symbol: sym, loading: true, lastAnalysis: null }));
     }
   };
@@ -311,17 +340,33 @@ const App: React.FC = () => {
                 placeholder="Nhập ID người nhận/Group..."
               />
             </div>
-            <div className="flex items-center gap-4 bg-slate-950 p-5 rounded-2xl border border-slate-800 md:col-span-2">
-              <div className="flex-1">
-                <p className="text-sm font-black text-white">Chế độ lọc kèo tinh hoa lớn hơn (75%)</p>
-                <p className="text-xs text-slate-500 mt-1">Hệ thống sẽ chỉ bắn tín hiệu lên Telegram khi AI cực kỳ tự tin về lệnh.</p>
+            <div className="md:col-span-2 flex flex-col md:flex-row gap-4">
+              <div className="flex-1 flex items-center gap-4 bg-slate-950 p-5 rounded-2xl border border-slate-800">
+                <div className="flex-1">
+                  <p className="text-sm font-black text-white">Chế độ lọc kèo tinh hoa (75%)</p>
+                  <p className="text-xs text-slate-500 mt-1">Hệ thống sẽ chỉ bắn tín hiệu lên Telegram khi AI cực kỳ tự tin về lệnh.</p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setTgConfig({...tgConfig, isEnabled: !tgConfig.isEnabled})}
+                  className={`w-14 h-7 rounded-full relative transition-all duration-300 ${tgConfig.isEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}
+                >
+                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all duration-300 ${tgConfig.isEnabled ? 'left-8' : 'left-1'}`} />
+                </button>
               </div>
-              <button 
-                type="button"
-                onClick={() => setTgConfig({...tgConfig, isEnabled: !tgConfig.isEnabled})}
-                className={`w-14 h-7 rounded-full relative transition-all duration-300 ${tgConfig.isEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}
+              <button
+                onClick={testTelegram}
+                disabled={isTestingTg}
+                className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white font-black text-xs uppercase px-8 py-5 rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 shrink-0"
               >
-                <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all duration-300 ${tgConfig.isEnabled ? 'left-8' : 'left-1'}`} />
+                {isTestingTg ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                )}
+                TEST GỬI TELEGRAM
               </button>
             </div>
           </div>
@@ -365,7 +410,7 @@ const App: React.FC = () => {
           <div className="bg-slate-900/30 rounded-3xl border border-slate-800/50 p-6 backdrop-blur-sm">
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex justify-between items-center">
               Tín hiệu VIP đã lọc
-              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Accuracy lớn hơn 75%</span>
+              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Accuracy > 75%</span>
             </h3>
             <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
               {signalLogs.length > 0 ? signalLogs.map((log, i) => (
