@@ -307,7 +307,7 @@ const App: React.FC = () => {
             <div className="md:col-span-2 flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
                <div>
                  <span className="text-sm font-bold block">Thông báo Telegram VIP</span>
-                 <span className="text-[10px] text-slate-500">Gửi tín hiệu 5M mỗi 15 phút (Confidence > 75%)</span>
+                 <span className="text-[10px] text-slate-500">Gửi tín hiệu 5M mỗi 15 phút (Confidence  75%)</span>
                </div>
                <button 
                   onClick={() => setTgConfig({...tgConfig, isEnabled: !tgConfig.isEnabled})}
