@@ -1,14 +1,14 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { CandleData, AnalysisResponse } from "../types";
 
 export const analyzeMarket = async (symbol: string, candles: CandleData[]): Promise<AnalysisResponse> => {
-  // Logic lấy API_KEY: Ưu tiên từ process.env (được Docker tiêm vào khi build/chạy)
-  // Nếu không có, tìm trong biến toàn cục window (dự phòng)
-  const apiKey = process.env.API_KEY || (window as any).GEMINI_API_KEY;
+  // Use process.env.API_KEY as per guidelines. 
+  // Our Docker build maps this to window.APP_CONFIG.API_KEY for runtime flexibility.
+  const apiKey = process.env.API_KEY;
   
-  if (!apiKey || apiKey === "undefined") {
-    throw new Error("API_KEY chưa được cấu hình. Vui lòng kiểm tra file docker-compose.yml");
+  if (!apiKey || apiKey === "__API_KEY_PLACEHOLDER__" || apiKey === "undefined") {
+    console.error("Critical: API_KEY is missing in the browser environment.");
+    throw new Error("API_KEY chưa được cấu hình. Vui lòng kiểm tra biến môi trường trong docker-compose.yml");
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -33,47 +33,50 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[]): Prom
   
   YÊU CẦU: Tất cả phần giải thích (reasoning) và xu hướng (trend) phải bằng TIẾNG VIỆT.`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          signal: { type: Type.STRING, description: "Bắt buộc là BUY, SELL, hoặc NEUTRAL" },
-          confidence: { type: Type.NUMBER, description: "Mức độ tin cậy 0-100" },
-          reasoning: { 
-            type: Type.ARRAY, 
-            items: { type: Type.STRING },
-            description: "Danh sách các lý do kỹ thuật bằng tiếng Việt"
-          },
-          keyLevels: {
-            type: Type.OBJECT,
-            properties: {
-              support: { type: Type.NUMBER },
-              resistance: { type: Type.NUMBER }
-            },
-            required: ["support", "resistance"]
-          },
-          indicators: {
-            type: Type.OBJECT,
-            properties: {
-              rsi: { type: Type.NUMBER },
-              trend: { type: Type.STRING }
-            },
-            required: ["rsi", "trend"]
-          }
-        },
-        required: ["signal", "confidence", "reasoning", "keyLevels", "indicators"],
-      },
-    },
-  });
-
   try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            signal: { type: Type.STRING, description: "Bắt buộc là BUY, SELL, hoặc NEUTRAL" },
+            confidence: { type: Type.NUMBER, description: "Mức độ tin cậy 0-100" },
+            reasoning: { 
+              type: Type.ARRAY, 
+              items: { type: Type.STRING },
+              description: "Danh sách các lý do kỹ thuật bằng tiếng Việt"
+            },
+            keyLevels: {
+              type: Type.OBJECT,
+              properties: {
+                support: { type: Type.NUMBER },
+                resistance: { type: Type.NUMBER }
+              },
+              required: ["support", "resistance"]
+            },
+            indicators: {
+              type: Type.OBJECT,
+              properties: {
+                rsi: { type: Type.NUMBER },
+                trend: { type: Type.STRING }
+              },
+              required: ["rsi", "trend"]
+            }
+          },
+          required: ["signal", "confidence", "reasoning", "keyLevels", "indicators"],
+        },
+      },
+    });
+
     return JSON.parse(response.text.trim()) as AnalysisResponse;
-  } catch (e) {
-    console.error("Lỗi phân tích Gemini:", e);
-    throw new Error("Lỗi định dạng phân tích AI");
+  } catch (e: any) {
+    console.error("Lỗi Gemini API chi tiết:", e);
+    if (e.message?.includes('API_KEY_INVALID') || e.message?.includes('403')) {
+      throw new Error("API Key không hợp lệ hoặc đã hết hạn.");
+    }
+    throw new Error(`Lỗi kết nối AI: ${e.message || 'Không rõ nguyên nhân'}`);
   }
 };
