@@ -328,7 +328,7 @@ const App: React.FC = () => {
            <p className="text-sm font-mono font-bold text-white truncate">{state.lastAnalysis?.activeModel || selectedModel}</p>
         </div>
         <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
-           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-tighter">Thông báo (>{tgConfig.minConfidence}%)</p>
+           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-tighter">Thông báo ({tgConfig.minConfidence}%)</p>
            <p className={`text-sm font-bold uppercase ${tgConfig.isEnabled ? 'text-emerald-500' : 'text-slate-600'}`}>{tgConfig.isEnabled ? 'Đang bật ✅' : 'Đã tắt ❌'}</p>
         </div>
       </div>
