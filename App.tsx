@@ -83,7 +83,29 @@ const App: React.FC = () => {
     }
   };
 
+  const updateSignalLogs = (analysis: AnalysisResponse, symbol: string, price: number) => {
+    // Chỉ lưu các tín hiệu có độ tin cậy tương đối tốt (>65%) để tránh rác danh sách
+    if (analysis.signal === 'NEUTRAL' || analysis.confidence <= 65) return;
+
+    setSignalLogs(prev => {
+      // Tránh trùng lặp tín hiệu nến hiện tại của cùng 1 symbol
+      const exists = prev.find(log => log.symbol === symbol && log.time === new Date().toLocaleTimeString().slice(0, 5));
+      if (exists) return prev;
+
+      return [{
+        time: new Date().toLocaleTimeString(),
+        symbol,
+        signal: analysis.signal,
+        price,
+        confidence: analysis.confidence
+      }, ...prev].slice(0, 20);
+    });
+  };
+
   const sendTelegram = async (analysis: AnalysisResponse, symbol: string, price: number) => {
+    // Luôn cập nhật log nội bộ trước
+    updateSignalLogs(analysis, symbol, price);
+
     if (!tgConfig.isEnabled || !tgConfig.botToken || !tgConfig.chatId) return;
     if (analysis.signal === 'NEUTRAL' || analysis.confidence <= 75) return;
 
@@ -115,21 +137,22 @@ const App: React.FC = () => {
           parse_mode: 'Markdown'
         })
       });
-
-      setSignalLogs(prev => [{
-        time: new Date().toLocaleTimeString(),
-        symbol,
-        signal: analysis.signal,
-        price,
-        confidence: analysis.confidence
-      }, ...prev].slice(0, 20));
     } catch (e) {
       console.error("Telegram Error:", e);
     }
   };
 
   const updateSymbolData = async (symbol: string, isSilent: boolean = false) => {
-    if (!isSilent) setState(prev => ({ ...prev, loading: true, error: null }));
+    // Nếu không chạy ngầm (chuyển coin), xóa phân tích cũ và hiện loading ngay
+    if (!isSilent) {
+      setState(prev => ({ 
+        ...prev, 
+        symbol, 
+        loading: true, 
+        lastAnalysis: null, 
+        error: null 
+      }));
+    }
     
     try {
       const [klines, ticker] = await Promise.all([
@@ -138,9 +161,10 @@ const App: React.FC = () => {
       ]);
 
       const latestTime = klines[klines.length - 1].time;
-      let analysisResult = state.symbol === symbol ? state.lastAnalysis : null;
+      let analysisResult = null;
 
-      if (latestTime !== lastAnalyzedMap.current[symbol]) {
+      // Chỉ thực hiện phân tích nếu là dữ liệu mới hoặc coin đang xem
+      if (latestTime !== lastAnalyzedMap.current[symbol] || !isSilent) {
         try {
           analysisResult = await analyzeMarket(symbol, klines);
           lastAnalyzedMap.current[symbol] = latestTime;
@@ -151,13 +175,14 @@ const App: React.FC = () => {
       }
 
       setState(prev => {
+        // Đảm bảo không ghi đè dữ liệu của coin khác khi request cũ trả về chậm
         if (prev.symbol !== symbol) return prev;
         return {
           ...prev,
           price: ticker.price,
           change24h: ticker.change24h,
           candles: klines,
-          lastAnalysis: analysisResult,
+          lastAnalysis: analysisResult || prev.lastAnalysis,
           loading: false,
           error: null
         };
@@ -169,7 +194,7 @@ const App: React.FC = () => {
         setState(prev => ({ 
           ...prev, 
           loading: false, 
-          error: `Không thể tải dữ liệu ${symbol}. Vui lòng kiểm tra kết nối.` 
+          error: `Lỗi kết nối sàn Binance cho ${symbol}.` 
         }));
       }
     }
@@ -198,6 +223,7 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [runFullScan, analyzing]);
 
+  // Chỉ gọi update khi symbol thực sự thay đổi từ UI
   useEffect(() => {
     updateSymbolData(state.symbol);
   }, [state.symbol]);
@@ -400,8 +426,8 @@ const App: React.FC = () => {
           
           <div className="bg-slate-900/30 rounded-3xl border border-slate-800/50 p-6 backdrop-blur-sm">
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex justify-between items-center">
-              Tín hiệu VIP đã lọc
-              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Accuracy trên 75%</span>
+              Lịch sử phân tích VIP
+              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Confidence trên 65%</span>
             </h3>
             <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
               {signalLogs.length > 0 ? signalLogs.map((log, i) => (
@@ -432,7 +458,8 @@ const App: React.FC = () => {
               )) : (
                 <div className="text-center py-12">
                    <div className="w-12 h-12 border-2 border-slate-800 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
-                   <p className="text-slate-500 text-sm font-medium italic">Đang lọc cơ hội thắng lớn từ {watchlist.length} cặp tiền...</p>
+                   <p className="text-slate-500 text-sm font-medium italic">Đang lọc tín hiệu {watchlist.length} cặp tiền...</p>
+                   <p className="text-[9px] text-slate-600 mt-2">AI chỉ hiện các kèo có độ tin cậy tốt.</p>
                 </div>
               )}
             </div>
@@ -442,19 +469,19 @@ const App: React.FC = () => {
         <div className="space-y-6">
           <h2 className="text-lg font-black text-white uppercase flex items-center gap-3">
             <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-            Phân tích 5M: {state.symbol}
+            AI Phân tích: {state.symbol}
           </h2>
           {state.loading ? (
             <div className="bg-slate-900/30 border border-slate-800 rounded-3xl p-16 text-center backdrop-blur-sm">
                <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
-               <p className="text-emerald-500 font-black text-xs uppercase tracking-widest">Đang tải...</p>
+               <p className="text-emerald-500 font-black text-xs uppercase tracking-widest">AI ĐANG QUÉT NẾN...</p>
             </div>
           ) : state.lastAnalysis ? (
             <SignalCard analysis={state.lastAnalysis} />
           ) : (
             <div className="bg-slate-900/30 border border-dashed border-slate-800 rounded-3xl p-12 text-center text-slate-500 backdrop-blur-sm">
-              <p className="text-sm font-medium mb-2">Đang chờ quét tín hiệu mới</p>
-              <p className="text-[10px] uppercase font-bold text-slate-600">Nến 5p tiếp theo sẽ có phân tích</p>
+              <p className="text-sm font-medium mb-2">Đang chờ tín hiệu {state.symbol}</p>
+              <p className="text-[10px] uppercase font-bold text-slate-600">Nến 5p tiếp theo sẽ có phân tích tự động</p>
             </div>
           )}
         </div>
