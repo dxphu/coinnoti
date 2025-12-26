@@ -37,6 +37,7 @@ const App: React.FC = () => {
   const [nextScanTime, setNextScanTime] = useState<string>('--:--');
   const [signalLogs, setSignalLogs] = useState<SignalLog[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [showErrorDetail, setShowErrorDetail] = useState(false);
   const [tgConfig, setTgConfig] = useState<TelegramConfig>(() => {
     const saved = localStorage.getItem('tg_config');
     return saved ? JSON.parse(saved) : { botToken: '', chatId: '', isEnabled: false };
@@ -62,7 +63,7 @@ const App: React.FC = () => {
     }
     setIsTestingTg(true);
     try {
-      const text = `🔔 *KIỂM TRA KẾT NỐI*\n\nHệ thống ScalpPro (5M analysis / 15M scan) đã kết nối thành công!`;
+      const text = `🔔 *KIỂM TRA KẾT NỐI*\n\nHệ thống ScalpPro đã kết nối thành công!`;
       const res = await fetch(`https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,7 +103,7 @@ const App: React.FC = () => {
     if (analysis.signal === 'NEUTRAL' || analysis.confidence <= 75) return;
 
     const emoji = analysis.signal === 'BUY' ? '🔥 MUA (BUY)' : '💥 BÁN (SELL)';
-    const text = `⭐ *TÍN HIỆU 5M (Quét 15M)*\n\nCặp: *${symbol}/USDT*\nHành động: *${emoji}*\nTin cậy: *${analysis.confidence}%*\nGiá: *$${price.toLocaleString()}*`;
+    const text = `⭐ *TÍN HIỆU 5M*\n\nCặp: *${symbol}/USDT*\nHành động: *${emoji}*\nTin cậy: *${analysis.confidence}%*\nGiá: *$${price.toLocaleString()}*`;
 
     try {
       await fetch(`https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`, {
@@ -135,11 +136,10 @@ const App: React.FC = () => {
           analysisResult = await analyzeMarket(symbol, klines);
           lastAnalyzedMap.current[symbol] = latestTime;
           sendTelegram(analysisResult, symbol, ticker.price);
-          setAiError(null); // Clear error if success
+          setAiError(null);
         } catch (err: any) {
           console.error("AI Analysis Failed:", err);
           if (!isSilent) setAiError(err.message);
-          // If silent (background scan) and hit rate limit, we stop showing error to avoid spam
         }
       }
 
@@ -169,8 +169,8 @@ const App: React.FC = () => {
     for (const s of watchlist) {
       if (isUserSwitching.current) break;
       await loadData(s, s !== currentSymbolRef.current);
-      // TĂNG THỜI GIAN CHỜ: 8 giây giữa mỗi coin để an toàn với gói Gemini Free (15 RPM)
-      await new Promise(r => setTimeout(r, 8000)); 
+      // Chờ lâu hơn giữa các coin: 10 giây để an toàn nhất với gói miễn phí
+      await new Promise(r => setTimeout(r, 10000)); 
     }
     setAnalyzing(false);
   }, [watchlist, analyzing]);
@@ -227,6 +227,65 @@ const App: React.FC = () => {
     }
   };
 
+  // Hàm helper để render thông tin lỗi AI đẹp mắt
+  const renderAiError = () => {
+    if (!aiError) return null;
+
+    let displayMsg = aiError;
+    let isRateLimit = aiError.includes("429") || aiError.includes("RESOURCE_EXHAUSTED");
+    let errorCode = "ERR";
+    
+    try {
+      // Thử parse nếu lỗi là JSON string
+      const parsed = JSON.parse(aiError);
+      if (parsed.error) {
+        displayMsg = parsed.error.message;
+        errorCode = parsed.error.code || parsed.error.status || "ERR";
+      }
+    } catch (e) {}
+
+    return (
+      <div className={`mb-6 p-4 rounded-2xl border transition-all ${isRateLimit ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' : 'bg-rose-500/10 border-rose-500/30 text-rose-500'}`}>
+        <div className="flex items-start gap-3">
+          <div className={`mt-0.5 p-1.5 rounded-lg ${isRateLimit ? 'bg-amber-500/20' : 'bg-rose-500/20'}`}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] font-black uppercase tracking-wider">
+                {isRateLimit ? 'CẢNH BÁO QUOTA (RATE LIMIT)' : 'LỖI HỆ THỐNG AI'}
+              </span>
+              <span className="text-[9px] font-mono bg-black/30 px-1.5 py-0.5 rounded">CODE: {errorCode}</span>
+            </div>
+            <p className="text-xs font-bold leading-relaxed">{displayMsg}</p>
+            
+            <button 
+              onClick={() => setShowErrorDetail(!showErrorDetail)}
+              className="mt-3 text-[9px] font-black uppercase tracking-tighter hover:underline opacity-70"
+            >
+              {showErrorDetail ? 'Ẩn chi tiết kỹ thuật' : 'Xem chi tiết kỹ thuật'}
+            </button>
+            
+            {showErrorDetail && (
+              <div className="mt-2 p-3 bg-black/40 rounded-xl font-mono text-[9px] overflow-x-auto whitespace-pre-wrap break-all border border-white/5">
+                {aiError}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {isRateLimit && (
+          <div className="mt-4 flex items-center gap-2 text-[10px] bg-amber-500/10 p-2 rounded-xl border border-amber-500/20">
+            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+            <span className="font-medium italic">Hệ thống đang tự động giãn thời gian quét. Vui lòng không F5 liên tục.</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#0b0f19] text-slate-200 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
@@ -238,7 +297,7 @@ const App: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-black text-white tracking-tight italic uppercase">ScalpPro <span className="text-emerald-400">5M/15M</span></h1>
-            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">AI Analysis • 15M Cycle</p>
+            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">AI Technical Analysis</p>
           </div>
         </div>
         
@@ -307,7 +366,7 @@ const App: React.FC = () => {
             <div className="md:col-span-2 flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
                <div>
                  <span className="text-sm font-bold block">Thông báo Telegram VIP</span>
-                 <span className="text-[10px] text-slate-500">Gửi tín hiệu 5M mỗi 15 phút (Confidence  75%)</span>
+                 <span className="text-[10px] text-slate-500">Chỉ gửi kèo đẹp (Confidence > 75%)</span>
                </div>
                <button 
                   onClick={() => setTgConfig({...tgConfig, isEnabled: !tgConfig.isEnabled})}
@@ -325,18 +384,7 @@ const App: React.FC = () => {
 
       {state.error && <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl text-xs font-bold text-center animate-pulse">⚠️ {state.error}</div>}
       
-      {aiError && (
-        <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in slide-in-from-top-2">
-          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          <div className="flex-1">
-            <p className="font-black uppercase text-[10px]">Cảnh báo hệ thống</p>
-            <p className="font-medium text-[11px] opacity-90">{aiError}</p>
-          </div>
-          {aiError.includes("Rate Limit") && (
-            <span className="text-[9px] bg-amber-500/20 px-2 py-1 rounded font-black uppercase">Chế độ chờ</span>
-          )}
-        </div>
-      )}
+      {renderAiError()}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">

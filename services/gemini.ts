@@ -4,11 +4,11 @@ import { CandleData, AnalysisResponse } from "../types";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export const analyzeMarket = async (symbol: string, candles: CandleData[], retries = 3): Promise<AnalysisResponse> => {
+export const analyzeMarket = async (symbol: string, candles: CandleData[], retries = 2): Promise<AnalysisResponse> => {
   const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-    throw new Error("API_KEY is missing. Please check your configuration.");
+    throw new Error("{\"error\":{\"code\": 401, \"message\": \"API_KEY chưa được cấu hình trong môi trường.\", \"status\": \"UNAUTHENTICATED\"}}");
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -38,7 +38,7 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[], retri
   5. tradePlan: { entry: số, stopLoss: số, takeProfit: số }.
   6. indicators: { rsi: số, trend: "Tăng/Giảm/Sideway" }.`;
 
-  for (let i = 0; i < retries; i++) {
+  for (let i = 0; i <= retries; i++) {
     try {
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -82,24 +82,31 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[], retri
       });
 
       const text = response.text;
-      if (!text) throw new Error("AI returned an empty response.");
+      if (!text) throw new Error("AI trả về nội dung trống.");
 
       const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
       return JSON.parse(cleanJson) as AnalysisResponse;
     } catch (e: any) {
-      const isRateLimit = e.message?.includes("429") || e.status === 429 || JSON.stringify(e).includes("RESOURCE_EXHAUSTED");
+      // Chuyển đổi lỗi thành chuỗi JSON để App.tsx có thể parse và hiển thị chi tiết
+      let errorDetail = "";
+      try {
+        // Một số lỗi từ SDK có cấu trúc lồng nhau
+        errorDetail = e.message || JSON.stringify(e);
+      } catch (parseErr) {
+        errorDetail = String(e);
+      }
+
+      const isRateLimit = errorDetail.includes("429") || errorDetail.includes("RESOURCE_EXHAUSTED");
       
-      if (isRateLimit && i < retries - 1) {
-        // Đợi theo lũy thừa: 5s, 10s...
-        const waitTime = (i + 1) * 5000;
-        console.warn(`Rate limit hit for ${symbol}. Retrying in ${waitTime}ms... (Attempt ${i + 1}/${retries})`);
+      if (isRateLimit && i < retries) {
+        const waitTime = (i + 1) * 6000;
+        console.warn(`Đụng giới hạn (429) cho ${symbol}. Thử lại sau ${waitTime}ms... (${i + 1}/${retries})`);
         await sleep(waitTime);
         continue;
       }
       
-      console.error("Gemini Technical Error:", e);
-      throw new Error(isRateLimit ? "API Gemini đang bận (Rate Limit). Vui lòng đợi hoặc nâng cấp gói API." : (e.message || "Unknown AI error"));
+      throw new Error(errorDetail);
     }
   }
-  throw new Error("Max retries reached");
+  throw new Error("Đã thử lại nhiều lần nhưng vẫn gặp lỗi kết nối AI.");
 };
