@@ -60,7 +60,7 @@ const App: React.FC = () => {
     }
     setIsTestingTg(true);
     try {
-      const text = `🔔 *KIỂM TRA KẾT NỐI*\n\nHệ thống ScalpPro 5M đã kết nối thành công với Telegram của bạn!\nTín hiệu sẽ được gửi tại đây khi có kèo > 75%.`;
+      const text = `🔔 *KIỂM TRA KẾT NỐI*\n\nHệ thống ScalpPro 5M đã kết nối thành công với Telegram của bạn!\nTín hiệu sẽ được gửi tại đây khi có kèo trên 75%.`;
       const res = await fetch(`https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,8 +85,6 @@ const App: React.FC = () => {
 
   const sendTelegram = async (analysis: AnalysisResponse, symbol: string, price: number) => {
     if (!tgConfig.isEnabled || !tgConfig.botToken || !tgConfig.chatId) return;
-    
-    // Lọc kèo độ tin cậy > 75%
     if (analysis.signal === 'NEUTRAL' || analysis.confidence <= 75) return;
 
     const signalKey = `${symbol}_${analysis.signal}_${Math.floor(Date.now() / 300000)}`;
@@ -105,7 +103,7 @@ const App: React.FC = () => {
                  `Giá vào: *$${price.toLocaleString()}*\n\n` +
                  tradePlanText +
                  `📝 *Lý do:* ${analysis.reasoning.join(', ')}\n\n` +
-                 `⚠️ _Chỉ lọc kèo có độ tin cậy > 75%_`;
+                 `⚠️ _Chỉ lọc kèo có độ tin cậy trên 75%_`;
 
     try {
       await fetch(`https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`, {
@@ -130,7 +128,9 @@ const App: React.FC = () => {
     }
   };
 
-  const scanSymbol = async (symbol: string) => {
+  const updateSymbolData = async (symbol: string, isSilent: boolean = false) => {
+    if (!isSilent) setState(prev => ({ ...prev, loading: true, error: null }));
+    
     try {
       const [klines, ticker] = await Promise.all([
         fetchKlines(symbol, '5m'),
@@ -138,28 +138,39 @@ const App: React.FC = () => {
       ]);
 
       const latestTime = klines[klines.length - 1].time;
-      
+      let analysisResult = state.symbol === symbol ? state.lastAnalysis : null;
+
       if (latestTime !== lastAnalyzedMap.current[symbol]) {
-        const result = await analyzeMarket(symbol, klines);
-        lastAnalyzedMap.current[symbol] = latestTime;
-        
-        if (symbol === state.symbol) {
-          setState(prev => ({ 
-            ...prev, 
-            lastAnalysis: result,
-            price: ticker.price,
-            change24h: ticker.change24h,
-            candles: klines,
-            loading: false
-          }));
+        try {
+          analysisResult = await analyzeMarket(symbol, klines);
+          lastAnalyzedMap.current[symbol] = latestTime;
+          sendTelegram(analysisResult, symbol, ticker.price);
+        } catch (aiError: any) {
+          console.error("AI Analysis Error:", aiError);
         }
-        
-        sendTelegram(result, symbol, ticker.price);
       }
-    } catch (e) {
-      console.error(`Scan error for ${symbol}:`, e);
-      if (symbol === state.symbol) {
-        setState(prev => ({ ...prev, error: `Không tìm thấy coin ${symbol}`, loading: false }));
+
+      setState(prev => {
+        if (prev.symbol !== symbol) return prev;
+        return {
+          ...prev,
+          price: ticker.price,
+          change24h: ticker.change24h,
+          candles: klines,
+          lastAnalysis: analysisResult,
+          loading: false,
+          error: null
+        };
+      });
+
+    } catch (binanceError: any) {
+      console.error(`Binance Error for ${symbol}:`, binanceError);
+      if (state.symbol === symbol) {
+        setState(prev => ({ 
+          ...prev, 
+          loading: false, 
+          error: `Không thể tải dữ liệu ${symbol}. Vui lòng kiểm tra kết nối.` 
+        }));
       }
     }
   };
@@ -168,30 +179,11 @@ const App: React.FC = () => {
     if (analyzing) return;
     setAnalyzing(true);
     for (const s of watchlist) {
-      await scanSymbol(s);
-      await new Promise(r => setTimeout(r, 1000));
+      await updateSymbolData(s, s !== state.symbol);
+      await new Promise(r => setTimeout(r, 1500));
     }
     setAnalyzing(false);
   }, [watchlist, state.symbol, analyzing]);
-
-  const loadViewData = useCallback(async (symbol: string) => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    try {
-      const [klines, ticker] = await Promise.all([
-        fetchKlines(symbol, '5m'),
-        fetchPrice(symbol)
-      ]);
-      setState(prev => ({
-        ...prev,
-        candles: klines,
-        price: ticker.price,
-        change24h: ticker.change24h,
-        loading: false
-      }));
-    } catch (e) {
-      setState(prev => ({ ...prev, loading: false, error: `Lỗi tải dữ liệu ${symbol}` }));
-    }
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -207,8 +199,7 @@ const App: React.FC = () => {
   }, [runFullScan, analyzing]);
 
   useEffect(() => {
-    loadViewData(state.symbol);
-    scanSymbol(state.symbol);
+    updateSymbolData(state.symbol);
   }, [state.symbol]);
 
   useEffect(() => {
@@ -224,17 +215,17 @@ const App: React.FC = () => {
     if (sym && !watchlist.includes(sym)) {
       setWatchlist(prev => [...prev, sym]);
       setNewSymbol('');
-      setState(prev => ({ ...prev, symbol: sym, loading: true, lastAnalysis: null }));
+      setState(prev => ({ ...prev, symbol: sym, loading: true, lastAnalysis: null, error: null }));
     }
   };
 
   const removeFromWatchlist = (e: React.MouseEvent, sym: string) => {
     e.stopPropagation();
     if (watchlist.length > 1) {
-      setWatchlist(prev => prev.filter(s => s !== sym));
+      const newWL = watchlist.filter(s => s !== sym);
+      setWatchlist(newWL);
       if (state.symbol === sym) {
-        const nextSym = watchlist.find(s => s !== sym) || 'BTC';
-        setState(prev => ({ ...prev, symbol: nextSym, lastAnalysis: null }));
+        setState(prev => ({ ...prev, symbol: newWL[0], lastAnalysis: null, error: null }));
       }
     }
   };
@@ -281,7 +272,7 @@ const App: React.FC = () => {
               <div key={sym} className="relative group">
                 <button
                   type="button"
-                  onClick={() => setState(p => ({...p, symbol: sym, lastAnalysis: null}))}
+                  onClick={() => setState(p => ({...p, symbol: sym, lastAnalysis: null, error: null}))}
                   className={`px-3 py-1.5 rounded-xl text-[10px] font-black transition-all duration-200 border ${
                     state.symbol === sym 
                       ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-900/20' 
@@ -343,7 +334,7 @@ const App: React.FC = () => {
             <div className="md:col-span-2 flex flex-col md:flex-row gap-4">
               <div className="flex-1 flex items-center gap-4 bg-slate-950 p-5 rounded-2xl border border-slate-800">
                 <div className="flex-1">
-                  <p className="text-sm font-black text-white">Chế độ lọc kèo tinh hoa (75%)</p>
+                  <p className="text-sm font-black text-white">Chế độ lọc kèo tinh hoa (trên 75%)</p>
                   <p className="text-xs text-slate-500 mt-1">Hệ thống sẽ chỉ bắn tín hiệu lên Telegram khi AI cực kỳ tự tin về lệnh.</p>
                 </div>
                 <button 
@@ -374,7 +365,7 @@ const App: React.FC = () => {
       )}
 
       {state.error && (
-        <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl text-xs font-bold text-center">
+        <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl text-xs font-bold text-center animate-bounce">
           ⚠️ {state.error}
         </div>
       )}
@@ -410,14 +401,14 @@ const App: React.FC = () => {
           <div className="bg-slate-900/30 rounded-3xl border border-slate-800/50 p-6 backdrop-blur-sm">
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex justify-between items-center">
               Tín hiệu VIP đã lọc
-              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Accuracy  75%</span>
+              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Accuracy trên 75%</span>
             </h3>
             <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
               {signalLogs.length > 0 ? signalLogs.map((log, i) => (
                 <div 
                   key={i} 
                   className="flex items-center justify-between p-4 bg-slate-950/40 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer group"
-                  onClick={() => setState(p => ({...p, symbol: log.symbol, lastAnalysis: null}))}
+                  onClick={() => setState(p => ({...p, symbol: log.symbol, lastAnalysis: null, error: null}))}
                 >
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${log.signal === 'BUY' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>

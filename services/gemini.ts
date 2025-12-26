@@ -25,12 +25,12 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[]): Prom
   
   CHIẾN THUẬT:
   - Tập trung vào Price Action, RSI và các vùng quá mua/quá bán trên khung ngắn.
-  - Chỉ đưa ra độ tin cậy (confidence) trên 75% nếu các chỉ báo hội tụ mạnh (Ví dụ: RSI phân kỳ + Chạm hỗ trợ mạnh + Nến đảo chiều).
+  - Chỉ đưa ra độ tin cậy (confidence) vượt ngưỡng 75% nếu các chỉ báo hội tụ mạnh (Ví dụ: RSI phân kỳ + Chạm hỗ trợ mạnh + Nến đảo chiều).
   - Khung 5 phút biến động nhanh, hãy ưu tiên Stop Loss ngắn và Take Profit nhanh.
 
   YÊU CẦU TRẢ VỀ JSON:
   1. signal: BUY, SELL hoặc NEUTRAL.
-  2. confidence: % độ tin cậy (Hãy khắt khe, chỉ >75% khi thực sự đẹp).
+  2. confidence: % độ tin cậy (Hãy khắt khe, chỉ trả về mức trên 75% khi thực sự đẹp).
   3. reasoning: 3 lý do kỹ thuật ngắn gọn.
   4. keyLevels: { support: số, resistance: số }.
   5. tradePlan: { entry: số, stopLoss: số, takeProfit: số }.
