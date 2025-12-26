@@ -4,7 +4,7 @@ import { CandleData, AnalysisResponse } from "../types";
 
 export const analyzeMarket = async (symbol: string, candles: CandleData[]): Promise<AnalysisResponse> => {
   // Tuân thủ hướng dẫn: Sử dụng trực tiếp từ process.env.API_KEY
-  const apiKey = process.env.API_KEY;
+  const apiKey = 'AIzaSyCpyPu6zZAbj4ZVafQhXq_QzucoMoA2dU8';
   
   if (!apiKey || apiKey === "__API_KEY_PLACEHOLDER__") {
     throw new Error("API_KEY chưa được cấu hình. Vui lòng kiểm tra môi trường.");
