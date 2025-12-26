@@ -80,7 +80,24 @@ const App: React.FC = () => {
     if (analysis.signal === 'NEUTRAL' || analysis.confidence < tgConfig.minConfidence) return;
 
     const emoji = analysis.signal === 'BUY' ? '🟢 MUA (BUY)' : '🔴 BÁN (SELL)';
-    const text = `🔔 *TÍN HIỆU CHIẾN THUẬT ${interval}*\n\n💎 Cặp: *${symbol}/USDT*\n🎯 Hành động: *${emoji}*\n🔥 Tin cậy: *${analysis.confidence}%*\n💰 Giá: *$${price.toLocaleString()}*\n🤖 Engine: \`${analysis.activeModel}\`\n\n📝 Lý do: ${analysis.reasoning[0]}`;
+    
+    // Xây dựng nội dung kế hoạch giao dịch nếu có
+    let tradePlanText = '';
+    if (analysis.tradePlan) {
+      tradePlanText = `\n📊 *KẾ HOẠCH GIAO DỊCH:*\n` +
+                      `📍 Entry: \`${analysis.tradePlan.entry.toLocaleString()}\`\n` +
+                      `🎯 Target (TP): \`${analysis.tradePlan.takeProfit.toLocaleString()}\`\n` +
+                      `🛡️ Stop Loss (SL): \`${analysis.tradePlan.stopLoss.toLocaleString()}\`\n`;
+    }
+
+    const text = `🔔 *TÍN HIỆU CHIẾN THUẬT ${interval}*\n\n` +
+                 `💎 Cặp: *${symbol}/USDT*\n` +
+                 `🎯 Hành động: *${emoji}*\n` +
+                 `🔥 Tin cậy: *${analysis.confidence}%*\n` +
+                 `💰 Giá hiện tại: *$${price.toLocaleString()}*\n` +
+                 tradePlanText +
+                 `🤖 Engine: \`${analysis.activeModel}\`\n\n` +
+                 `📝 *Lý do:* ${analysis.reasoning.join('\n• ')}`;
 
     try {
       await fetch(`https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`, {
@@ -116,7 +133,6 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, symbol, loading: true, lastAnalysis: null, error: null }));
     }
     
-    // Chuyển đổi scanInterval sang định dạng Binance (15 -> '15m')
     const intervalStr = scanInterval >= 60 ? `${scanInterval/60}h` : `${scanInterval}m`;
 
     try {
@@ -162,7 +178,6 @@ const App: React.FC = () => {
     for (const s of watchlist) {
       if (isUserSwitching.current) break;
       await loadData(s, s !== currentSymbolRef.current);
-      // Giãn cách 8s để tránh kẹt API Binance/Gemini Free tier
       await new Promise(r => setTimeout(r, 8000)); 
     }
     setAnalyzing(false);
