@@ -1,7 +1,7 @@
 
 import { CandleData } from '../types';
 
-export const fetchKlines = async (symbol: string, interval: string = '15m', limit: number = 500): Promise<CandleData[]> => {
+export const fetchKlines = async (symbol: string, interval: string = '15m', limit: number = 1000): Promise<CandleData[]> => {
   try {
     const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}USDT&interval=${interval}&limit=${limit}`);
     if (!response.ok) throw new Error('Failed to fetch market data');
