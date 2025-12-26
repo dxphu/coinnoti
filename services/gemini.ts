@@ -3,8 +3,14 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { CandleData, AnalysisResponse } from "../types";
 
 export const analyzeMarket = async (symbol: string, candles: CandleData[]): Promise<AnalysisResponse> => {
-  // Biến process.env.API_KEY sẽ được Docker replace bằng giá trị thực tế khi container khởi chạy
-  const apiKey = (process.env.API_KEY as any);
+  // Logic lấy API_KEY: Ưu tiên từ process.env (được Docker tiêm vào khi build/chạy)
+  // Nếu không có, tìm trong biến toàn cục window (dự phòng)
+  const apiKey = process.env.API_KEY || (window as any).GEMINI_API_KEY;
+  
+  if (!apiKey || apiKey === "undefined") {
+    throw new Error("API_KEY chưa được cấu hình. Vui lòng kiểm tra file docker-compose.yml");
+  }
+
   const ai = new GoogleGenAI({ apiKey: apiKey });
   
   const relevantCandles = candles.slice(-50).map(c => ({
