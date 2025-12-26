@@ -52,7 +52,7 @@ const Chart: React.FC<ChartProps> = ({ data, analysis }) => {
     <div className="h-[450px] w-full bg-slate-950/30 rounded-3xl p-6 border border-slate-900 shadow-inner overflow-hidden relative">
       <div className="absolute top-6 left-8 z-10">
          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Scalp 5m</span>
+            <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Strategic Trend View</span>
          </div>
       </div>
       
@@ -85,8 +85,8 @@ const Chart: React.FC<ChartProps> = ({ data, analysis }) => {
           />
           {analysis && (
             <>
-              <ReferenceLine y={analysis.keyLevels.support} stroke="#10b981" strokeDasharray="3 3" />
-              <ReferenceLine y={analysis.keyLevels.resistance} stroke="#ef4444" strokeDasharray="3 3" />
+              <ReferenceLine y={analysis.keyLevels.support} stroke="#10b981" strokeDasharray="3 3" label={{ position: 'right', value: 'Support', fill: '#10b981', fontSize: 10 }} />
+              <ReferenceLine y={analysis.keyLevels.resistance} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'right', value: 'Resistance', fill: '#ef4444', fontSize: 10 }} />
             </>
           )}
         </AreaChart>
