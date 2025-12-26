@@ -15,15 +15,21 @@ interface SignalLog {
 }
 
 const App: React.FC = () => {
-  // 1. Tải Watchlist trước để lấy đồng coin mặc định
+  // 1. Tải Watchlist
   const [watchlist, setWatchlist] = useState<string[]>(() => {
     const saved = localStorage.getItem('crypto_watchlist');
-    return saved ? JSON.parse(saved) : ['BTC', 'ETH', 'SOL', 'NEAR', 'DOGE'];
+    return saved ? JSON.parse(saved) : ['BNB'];
   });
 
-  // 2. Khởi tạo state với symbol là phần tử đầu tiên của watchlist
+  // 2. Tải Chu kỳ quét (mặc định 15p)
+  const [scanInterval, setScanInterval] = useState<number>(() => {
+    const saved = localStorage.getItem('scan_interval');
+    return saved ? parseInt(saved) : 15;
+  });
+
+  // 3. Khởi tạo state với symbol đầu tiên của watchlist (đã fix lỗi luôn là BTC)
   const [state, setState] = useState<MarketState>(() => ({
-    symbol: watchlist[0] || 'BTC',
+    symbol: watchlist[0] || 'BNB',
     price: 0,
     change24h: 0,
     candles: [],
@@ -56,7 +62,8 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('tg_config', JSON.stringify(tgConfig));
     localStorage.setItem('crypto_watchlist', JSON.stringify(watchlist));
-  }, [tgConfig, watchlist]);
+    localStorage.setItem('scan_interval', scanInterval.toString());
+  }, [tgConfig, watchlist, scanInterval]);
 
   const testTelegram = async () => {
     if (!tgConfig.botToken || !tgConfig.chatId) {
@@ -160,7 +167,7 @@ const App: React.FC = () => {
 
     } catch (err) {
       if (currentSymbolRef.current === symbol) {
-        setState(prev => ({ ...prev, loading: false, error: `Lỗi kết nối sàn Binance cho ${symbol}` }));
+        setState(prev => ({ ...prev, loading: false, error: `Lỗi kết nối Binance cho ${symbol}` }));
       }
     }
   };
@@ -171,7 +178,7 @@ const App: React.FC = () => {
     for (const s of watchlist) {
       if (isUserSwitching.current) break;
       await loadData(s, s !== currentSymbolRef.current);
-      // Giãn cách 12s để cực kỳ an toàn với Rate Limit (5 requests/phút)
+      // Giãn cách 12s để an toàn với Rate Limit (5 req/min)
       await new Promise(r => setTimeout(r, 12000)); 
     }
     setAnalyzing(false);
@@ -180,26 +187,27 @@ const App: React.FC = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      const minutes = now.getMinutes();
-      const nextQuarter = (Math.floor(minutes / 15) + 1) * 15;
-      const nextClose = new Date(now);
+      const totalMinutes = now.getHours() * 60 + now.getMinutes();
       
-      if (nextQuarter === 60) {
-        nextClose.setHours(now.getHours() + 1);
-        nextClose.setMinutes(0, 0, 0);
-      } else {
-        nextClose.setMinutes(nextQuarter, 0, 0);
-      }
+      // Tính điểm mốc tiếp theo dựa trên scanInterval
+      const nextIntervalPoint = (Math.floor(totalMinutes / scanInterval) + 1) * scanInterval;
       
-      const diff = nextClose.getTime() - Date.now();
+      const nextScanDate = new Date();
+      nextScanDate.setHours(0, nextIntervalPoint, 0, 0);
+      
+      const diff = nextScanDate.getTime() - Date.now();
       const mins = Math.floor(diff / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
+      
       setNextScanTime(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
       
-      if (diff < 5000 && !analyzing) runScanner();
+      // Nếu còn dưới 2 giây và không đang quét, kích hoạt quét
+      if (diff < 2000 && !analyzing) {
+        runScanner();
+      }
     }, 1000);
     return () => clearInterval(timer);
-  }, [runScanner, analyzing]);
+  }, [runScanner, analyzing, scanInterval]);
 
   useEffect(() => {
     isUserSwitching.current = true;
@@ -223,14 +231,12 @@ const App: React.FC = () => {
     const newWatchlist = watchlist.filter(s => s !== sym);
     setWatchlist(newWatchlist);
     
-    // Nếu xóa đồng đang xem, chọn đồng đầu tiên trong danh sách mới
     if (state.symbol === sym) {
       if (newWatchlist.length > 0) {
         setState(p => ({ ...p, symbol: newWatchlist[0] }));
       } else {
-        // Nếu xóa hết, mặc định về BTC
-        setWatchlist(['BTC']);
-        setState(p => ({ ...p, symbol: 'BTC' }));
+        setWatchlist(['BNB']);
+        setState(p => ({ ...p, symbol: 'BNB' }));
       }
     }
   };
@@ -243,14 +249,12 @@ const App: React.FC = () => {
     let isRateLimit = aiError.includes("429") || aiError.includes("RESOURCE_EXHAUSTED");
     
     try {
-      // Thử parse JSON lỗi từ service trả về
       const parsed = JSON.parse(aiError);
       if (parsed.error) {
         displayMsg = parsed.error.message;
         errorCode = parsed.error.code || "ERR";
       }
     } catch (e) {
-      // Nếu không phải JSON, tìm mã lỗi HTTP trong chuỗi
       const codeMatch = aiError.match(/(\d{3})/);
       if (codeMatch) errorCode = codeMatch[1];
     }
@@ -266,7 +270,7 @@ const App: React.FC = () => {
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1">
               <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
-                {isRateLimit ? 'Vượt quá giới hạn (Rate Limit)' : 'Lỗi kết nối Gemini'}
+                {isRateLimit ? 'Rate Limit (429)' : 'AI Connection Error'}
               </span>
               <span className="text-[9px] font-mono font-bold bg-black/40 px-2 py-0.5 rounded border border-white/5">CODE: {errorCode}</span>
             </div>
@@ -277,7 +281,6 @@ const App: React.FC = () => {
               className="mt-3 text-[9px] font-black uppercase tracking-widest hover:underline opacity-60 flex items-center gap-1"
             >
               {showErrorDetail ? 'Đóng chi tiết' : 'Xem mã lỗi gốc'}
-              <svg className={`w-3 h-3 transition-transform ${showErrorDetail ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
             
             {showErrorDetail && (
@@ -295,14 +298,14 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#0b0f19] text-slate-200 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-900/40">
+          <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
             <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-black text-white tracking-tight italic uppercase">ScalpPro <span className="text-emerald-400">AI</span></h1>
-            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">Advanced Market Analysis</p>
+            <h1 className="text-2xl font-black text-white italic uppercase">ScalpPro <span className="text-emerald-400">AI</span></h1>
+            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">Real-time Market Hunter</p>
           </div>
         </div>
         
@@ -316,7 +319,7 @@ const App: React.FC = () => {
               className="bg-transparent text-xs font-bold outline-none w-24 text-emerald-400 placeholder:text-slate-600"
               onKeyDown={(e) => e.key === 'Enter' && addToWatchlist()}
             />
-            <button onClick={addToWatchlist} className="text-emerald-500 hover:text-emerald-400">
+            <button onClick={addToWatchlist} className="text-emerald-500">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
           </div>
@@ -326,89 +329,101 @@ const App: React.FC = () => {
                 key={sym}
                 onClick={() => setState(p => ({...p, symbol: sym}))}
                 className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black transition-all border cursor-pointer ${
-                  state.symbol === sym ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600 shadow-sm'
+                  state.symbol === sym ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400'
                 }`}
               >
                 {sym}
                 <button 
                   onClick={(e) => removeFromWatchlist(e, sym)}
-                  className={`p-0.5 rounded-md hover:bg-black/20 transition-colors ${state.symbol === sym ? 'text-white/60 hover:text-white' : 'text-slate-600 hover:text-rose-500'}`}
+                  className="p-0.5 rounded-md hover:text-rose-500"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
             ))}
           </div>
-          <button onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-xl border bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors">
+          <button onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-xl border bg-slate-800/50 border-slate-700 text-slate-400">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           </button>
         </div>
       </header>
 
       {showSettings && (
-        <div className="mb-8 p-6 bg-slate-900 border border-emerald-600/30 rounded-3xl animate-in zoom-in duration-300 shadow-2xl">
+        <div className="mb-8 p-6 bg-slate-900 border border-emerald-600/30 rounded-3xl shadow-2xl animate-in zoom-in duration-300">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1">
-              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Telegram Bot Token</label>
+              <label className="text-[10px] text-slate-500 font-bold uppercase">Chu kỳ quét danh sách</label>
+              <select 
+                value={scanInterval}
+                onChange={(e) => setScanInterval(parseInt(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-sm text-emerald-400 font-bold"
+              >
+                <option value={1}>1 Phút (Rất nhanh - Dễ lỗi 429)</option>
+                <option value={5}>5 Phút (Phù hợp Scalping)</option>
+                <option value={15}>15 Phút (Mặc định - Khuyên dùng)</option>
+                <option value={30}>30 Phút</option>
+                <option value={60}>60 Phút</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-500 font-bold uppercase">Telegram Bot Token</label>
               <input 
                 type="password" 
                 value={tgConfig.botToken} 
                 onChange={(e) => setTgConfig({...tgConfig, botToken: e.target.value})} 
-                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-sm focus:border-emerald-500/50" 
-                placeholder="Nhập Token..." 
+                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-sm" 
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Telegram Chat ID</label>
+              <label className="text-[10px] text-slate-500 font-bold uppercase">Telegram Chat ID</label>
               <input 
                 type="text" 
                 value={tgConfig.chatId} 
                 onChange={(e) => setTgConfig({...tgConfig, chatId: e.target.value})} 
-                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-sm focus:border-emerald-500/50" 
-                placeholder="Nhập Chat ID..." 
+                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-sm" 
               />
             </div>
-            <div className="md:col-span-2 flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <div className="flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
                <div>
                  <span className="text-sm font-bold block">Thông báo Telegram</span>
-                 <span className="text-[10px] text-slate-500">Chỉ gửi các tín hiệu có độ tin cậy  75%</span>
+                 <span className="text-[10px] text-slate-500">Confidence  75%</span>
                </div>
                <button 
                   onClick={() => setTgConfig({...tgConfig, isEnabled: !tgConfig.isEnabled})}
-                  className={`w-12 h-6 rounded-full transition-all relative ${tgConfig.isEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}
+                  className={`w-12 h-6 rounded-full relative ${tgConfig.isEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}
                >
                   <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${tgConfig.isEnabled ? 'left-7' : 'left-1'}`} />
                </button>
             </div>
-            <button onClick={testTelegram} disabled={isTestingTg} className="md:col-span-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 p-3 rounded-xl font-black text-xs transition-all shadow-lg shadow-emerald-900/20">
-              {isTestingTg ? 'ĐANG GỬI THỬ...' : 'GỬI TIN NHẮN THỬ NGHIỆM'}
+            <button onClick={testTelegram} disabled={isTestingTg} className="md:col-span-2 bg-emerald-600 p-3 rounded-xl font-black text-xs">
+              {isTestingTg ? 'ĐANG GỬI...' : 'TEST GỬI TIN NHẮN'}
             </button>
           </div>
         </div>
       )}
 
-      {state.error && <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl text-xs font-bold text-center animate-pulse">⚠️ {state.error}</div>}
+      {state.error && <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl text-xs font-bold text-center">⚠️ {state.error}</div>}
       
       {renderAiError()}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Mã đang xem</p>
            <p className="text-2xl font-mono font-black text-white">{state.symbol}/USDT</p>
         </div>
-        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Giá Binance</p>
            <p className="text-xl font-mono font-bold text-white">${state.price.toLocaleString()}</p>
         </div>
-        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
-           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Quét chu kỳ 15m</p>
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
+           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Quét chu kỳ ({scanInterval}m)</p>
            <p className="text-2xl font-mono font-bold text-emerald-400">{nextScanTime}</p>
         </div>
-        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Trạng thái Scanner</p>
            <p className={`text-sm font-bold uppercase flex items-center gap-2 ${analyzing ? 'text-amber-500' : 'text-emerald-500'}`}>
              {analyzing ? (
-               <><span className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />Đang phân tích...</>
+               <><span className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />Đang quét...</>
              ) : 'Sẵn sàng'}
            </p>
         </div>
@@ -421,7 +436,7 @@ const App: React.FC = () => {
           <div className="bg-slate-900/30 rounded-3xl border border-slate-800/50 p-6 backdrop-blur-sm shadow-xl">
             <h3 className="text-sm font-black uppercase text-slate-400 mb-6 flex justify-between">
               Nhật ký tín hiệu gần đây
-              <span className="text-[9px] text-slate-600 italic">Dữ liệu 5M nạp mỗi 15M</span>
+              <span className="text-[9px] text-slate-600 italic">Dữ liệu 5M nạp mỗi {scanInterval}m</span>
             </h3>
             <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
               {signalLogs.length > 0 ? signalLogs.map((log, i) => (
@@ -444,10 +459,7 @@ const App: React.FC = () => {
                 </div>
               )) : (
                 <div className="text-center py-16 border border-dashed border-slate-800 rounded-3xl bg-black/10">
-                   <div className="mb-3 opacity-20 flex justify-center">
-                      <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                   </div>
-                   <p className="text-slate-600 text-sm font-medium">Chưa có tín hiệu nào được ghi nhận...</p>
+                   <p className="text-slate-600 text-sm font-medium">Chưa có tín hiệu nào...</p>
                 </div>
               )}
             </div>

@@ -5,14 +5,14 @@ import { CandleData, AnalysisResponse } from "../types";
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const analyzeMarket = async (symbol: string, candles: CandleData[], retries = 1): Promise<AnalysisResponse> => {
-  // Luôn lấy API_KEY từ process.env theo quy định bảo mật
+  // BẮT BUỘC: Sử dụng process.env.API_KEY theo hướng dẫn
   const apiKey = 'AIzaSyCzk9WrtTRQe1xsffRMk68ytP6EsrFdfPo';
   
   if (!apiKey) {
     throw new Error(JSON.stringify({
       error: {
         code: 401,
-        message: "API_KEY chưa được cấu hình. Vui lòng kiểm tra file index.html hoặc Docker.",
+        message: "API_KEY chưa được cấu hình trong hệ thống.",
         status: "UNAUTHENTICATED"
       }
     }));
@@ -104,14 +104,12 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[], retri
       
       if (isRateLimit && i < retries) {
         const waitTime = (i + 1) * 5000;
-        console.warn(`Đang thử lại sau lỗi 429... (${i+1}/${retries+1})`);
         await sleep(waitTime);
         continue;
       }
       
-      // Đảm bảo lỗi ném ra là một chuỗi có thể chứa thông tin hữu ích cho UI
       throw new Error(rawError);
     }
   }
-  throw new Error("Không thể kết nối với Gemini sau nhiều lần thử.");
+  throw new Error("Không thể kết nối với Gemini.");
 };
