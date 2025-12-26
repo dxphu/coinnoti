@@ -10,10 +10,19 @@ export interface CandleData {
 
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
 
+export type GeminiModel = 
+  | 'gemini-3-pro-preview' 
+  | 'gemini-3-flash-preview' 
+  | 'gemini-2.5-flash-preview-09-2025' 
+  | 'gemini-2.5-flash-lite-latest'
+  | 'gemini-flash-latest'
+  | 'gemini-flash-lite-latest';
+
 export interface AnalysisResponse {
   signal: SignalType;
   confidence: number;
   reasoning: string[];
+  activeModel?: string;
   keyLevels: {
     support: number;
     resistance: number;
@@ -33,6 +42,7 @@ export interface TelegramConfig {
   botToken: string;
   chatId: string;
   isEnabled: boolean;
+  minConfidence: number; // Ngưỡng độ tin cậy để gửi thông báo
 }
 
 export interface MarketState {
