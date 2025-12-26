@@ -12,6 +12,7 @@ interface SignalLog {
   signal: SignalType;
   price: number;
   confidence: number;
+  interval: string;
 }
 
 const App: React.FC = () => {
@@ -67,21 +68,19 @@ const App: React.FC = () => {
     localStorage.setItem('selected_model', selectedModel);
   }, [tgConfig, watchlist, scanInterval, selectedModel]);
 
-  const sendTelegramNotification = async (analysis: AnalysisResponse, symbol: string, price: number) => {
+  const sendTelegramNotification = async (analysis: AnalysisResponse, symbol: string, price: number, interval: string) => {
     if (analysis.signal !== 'NEUTRAL') {
       setSignalLogs(prev => {
         const timeStr = new Date().toLocaleTimeString();
-        return [{ time: timeStr, symbol, signal: analysis.signal, price, confidence: analysis.confidence }, ...prev].slice(0, 20);
+        return [{ time: timeStr, symbol, signal: analysis.signal, price, confidence: analysis.confidence, interval }, ...prev].slice(0, 20);
       });
     }
 
     if (!tgConfig.isEnabled || !tgConfig.botToken || !tgConfig.chatId) return;
-    
-    // Sử dụng ngưỡng tin cậy từ cài đặt thay vì 75 cứng
     if (analysis.signal === 'NEUTRAL' || analysis.confidence < tgConfig.minConfidence) return;
 
     const emoji = analysis.signal === 'BUY' ? '🟢 MUA (BUY)' : '🔴 BÁN (SELL)';
-    const text = `🔔 *TÍN HIỆU CHIẾN THUẬT*\n\n💎 Cặp: *${symbol}/USDT*\n🎯 Hành động: *${emoji}*\n🔥 Tin cậy: *${analysis.confidence}%*\n💰 Giá: *$${price.toLocaleString()}*\n🤖 Engine: \`${analysis.activeModel}\`\n\n📝 Lý do: ${analysis.reasoning[0]}`;
+    const text = `🔔 *TÍN HIỆU CHIẾN THUẬT ${interval}*\n\n💎 Cặp: *${symbol}/USDT*\n🎯 Hành động: *${emoji}*\n🔥 Tin cậy: *${analysis.confidence}%*\n💰 Giá: *$${price.toLocaleString()}*\n🤖 Engine: \`${analysis.activeModel}\`\n\n📝 Lý do: ${analysis.reasoning[0]}`;
 
     try {
       await fetch(`https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`, {
@@ -116,19 +115,30 @@ const App: React.FC = () => {
       setAiError(null);
       setState(prev => ({ ...prev, symbol, loading: true, lastAnalysis: null, error: null }));
     }
+    
+    // Chuyển đổi scanInterval sang định dạng Binance (15 -> '15m')
+    const intervalStr = scanInterval >= 60 ? `${scanInterval/60}h` : `${scanInterval}m`;
+
     try {
-      const [klines, ticker] = await Promise.all([fetchKlines(symbol, '5m'), fetchPrice(symbol)]);
+      const [klines, ticker] = await Promise.all([
+        fetchKlines(symbol, intervalStr), 
+        fetchPrice(symbol)
+      ]);
+
       if (currentSymbolRef.current !== symbol && !isSilent) return;
+      
       const latestTime = klines[klines.length - 1].time;
       let analysisResult = null;
+
       if (latestTime !== lastAnalyzedMap.current[symbol] || !isSilent) {
         try {
           analysisResult = await analyzeMarket(symbol, klines, selectedModel);
           lastAnalyzedMap.current[symbol] = latestTime;
-          sendTelegramNotification(analysisResult, symbol, ticker.price);
+          sendTelegramNotification(analysisResult, symbol, ticker.price, intervalStr);
           setAiError(null);
         } catch (err: any) { if (!isSilent) setAiError(err.message); }
       }
+
       setState(prev => {
         if (prev.symbol !== symbol && !isSilent) return prev;
         return {
@@ -152,10 +162,11 @@ const App: React.FC = () => {
     for (const s of watchlist) {
       if (isUserSwitching.current) break;
       await loadData(s, s !== currentSymbolRef.current);
+      // Giãn cách 8s để tránh kẹt API Binance/Gemini Free tier
       await new Promise(r => setTimeout(r, 8000)); 
     }
     setAnalyzing(false);
-  }, [watchlist, analyzing, selectedModel]);
+  }, [watchlist, analyzing, selectedModel, scanInterval]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -178,7 +189,7 @@ const App: React.FC = () => {
     loadData(state.symbol);
     const timeout = setTimeout(() => isUserSwitching.current = false, 5000);
     return () => clearTimeout(timeout);
-  }, [state.symbol, selectedModel]);
+  }, [state.symbol, selectedModel, scanInterval]);
 
   const addToWatchlist = () => {
     const sym = newSymbol.toUpperCase().trim().replace('USDT', '');
@@ -237,20 +248,20 @@ const App: React.FC = () => {
                 <optgroup label="Dòng Pro (Hạn chế Free)">
                   <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
                 </optgroup>
-                <optgroup label="Dòng 2.5 & 3 Flash (Free Cao)">
+                <optgroup label="Dòng 2.5 & 3 Flash (Hạn mức Free cao)">
                   <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                  <option value="gemini-2.5-flash-preview-09-2025">Gemini 2.5 Flash (Khuyên dùng)</option>
+                  <option value="gemini-2.5-flash-preview-09-2025">Gemini 2.5 Flash</option>
                   <option value="gemini-2.5-flash-lite-latest">Gemini 2.5 Flash Lite</option>
                 </optgroup>
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Chu kỳ quét</label>
+              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Khung nến / Chu kỳ quét</label>
               <select value={scanInterval} onChange={(e) => setScanInterval(parseInt(e.target.value))} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-sm text-emerald-400 font-bold">
                 <option value={1}>1 Phút</option>
                 <option value={5}>5 Phút</option>
                 <option value={15}>15 Phút</option>
-                <option value={60}>60 Phút</option>
+                <option value={60}>1 Giờ</option>
               </select>
             </div>
             <div className="space-y-1">
@@ -259,14 +270,14 @@ const App: React.FC = () => {
             </div>
             <div className="space-y-1">
               <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Telegram Chat ID</label>
-              <input type="text" value={tgConfig.chatId} onChange={(e) => setTgConfig({...tgConfig, chatId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-sm" placeholder="Chat ID của bạn..." />
+              <input type="text" value={tgConfig.chatId} onChange={(e) => setTgConfig({...tgConfig, chatId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-sm" placeholder="ID người nhận..." />
             </div>
           </div>
           
           <div className="mt-8 pt-8 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-1">
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Độ tin cậy báo động: {tgConfig.minConfidence}%</label>
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Ngưỡng độ tin cậy báo động: {tgConfig.minConfidence}%</label>
               </div>
               <input 
                 type="range" 
@@ -277,13 +288,12 @@ const App: React.FC = () => {
                 onChange={(e) => setTgConfig({...tgConfig, minConfidence: parseInt(e.target.value)})} 
                 className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
               />
-              <p className="text-[9px] text-slate-500 italic">Chỉ gửi thông báo khi AI đánh giá xác suất thắng cao hơn mức này.</p>
             </div>
 
             <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800 h-fit">
                <div className="flex-1">
                  <span className="text-sm font-bold block text-white">Thông báo Telegram</span>
-                 <span className="text-[10px] text-slate-500 uppercase">{tgConfig.isEnabled ? 'Đang bật' : 'Đang tắt'}</span>
+                 <span className="text-[10px] text-slate-500 uppercase">{tgConfig.isEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}</span>
                </div>
                <button onClick={() => setTgConfig({...tgConfig, isEnabled: !tgConfig.isEnabled})} className={`w-14 h-7 rounded-full relative transition-all shadow-inner ${tgConfig.isEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}>
                   <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-all ${tgConfig.isEnabled ? 'left-8' : 'left-1'}`} />
@@ -310,15 +320,15 @@ const App: React.FC = () => {
            <p className="text-2xl font-black text-white">{state.symbol} <span className="text-sm font-mono text-slate-400 ml-2">${state.price.toLocaleString()}</span></p>
         </div>
         <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
-           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-tighter">Chu kỳ quét</p>
+           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-tighter">Đếm ngược quét ({scanInterval}m)</p>
            <p className="text-2xl font-mono font-bold text-emerald-400">{nextScanTime}</p>
         </div>
         <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
-           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-tighter">AI Hoạt động</p>
+           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-tighter">AI Engine (Env: OK)</p>
            <p className="text-sm font-mono font-bold text-white truncate">{state.lastAnalysis?.activeModel || selectedModel}</p>
         </div>
         <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50">
-           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-tighter">Thông báo ({tgConfig.minConfidence}%)</p>
+           <p className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-tighter">Thông báo (>{tgConfig.minConfidence}%)</p>
            <p className={`text-sm font-bold uppercase ${tgConfig.isEnabled ? 'text-emerald-500' : 'text-slate-600'}`}>{tgConfig.isEnabled ? 'Đang bật ✅' : 'Đã tắt ❌'}</p>
         </div>
       </div>
@@ -327,14 +337,14 @@ const App: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           <Chart data={state.candles} analysis={state.lastAnalysis} />
           <div className="bg-slate-900/30 rounded-3xl border border-slate-800/50 p-6 shadow-xl">
-            <h3 className="text-xs font-black uppercase text-slate-400 mb-6 flex justify-between border-b border-slate-800 pb-4">Nhật ký tín hiệu hôm nay</h3>
+            <h3 className="text-xs font-black uppercase text-slate-400 mb-6 flex justify-between border-b border-slate-800 pb-4">Nhật ký tín hiệu gần đây</h3>
             <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
               {signalLogs.map((log, i) => (
                 <div key={i} onClick={() => setState(p => ({...p, symbol: log.symbol}))} className="flex items-center justify-between p-4 bg-slate-950/40 rounded-2xl border border-slate-800 hover:border-emerald-500/50 cursor-pointer group transition-all">
                   <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${log.signal === 'BUY' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>{log.signal}</div>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] ${log.signal === 'BUY' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>{log.signal}</div>
                     <div>
-                      <p className="font-black text-sm text-white group-hover:text-emerald-400">{log.symbol} <span className="text-[9px] text-slate-500 ml-2 font-normal">{log.time}</span></p>
+                      <p className="font-black text-sm text-white group-hover:text-emerald-400">{log.symbol} <span className="text-[9px] text-slate-500 ml-2 font-normal">[{log.interval}] {log.time}</span></p>
                       <p className="text-[9px] font-bold uppercase text-slate-500">Tin cậy: <span className={log.confidence >= tgConfig.minConfidence ? 'text-emerald-500' : 'text-slate-400'}>{log.confidence}%</span></p>
                     </div>
                   </div>
@@ -343,7 +353,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
               ))}
-              {signalLogs.length === 0 && <div className="text-center py-10 opacity-20 text-xs font-bold uppercase tracking-widest">Đang đợi tín hiệu đầu tiên...</div>}
+              {signalLogs.length === 0 && <div className="text-center py-10 opacity-20 text-xs font-bold uppercase tracking-widest">Đang trực chiến...</div>}
             </div>
           </div>
         </div>
@@ -352,12 +362,12 @@ const App: React.FC = () => {
           {state.loading ? (
             <div className="bg-slate-900/30 border border-slate-800 rounded-3xl p-20 text-center backdrop-blur-md">
               <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-emerald-500 font-black text-[10px] uppercase animate-pulse">AI đang phân tích biểu đồ...</p>
+              <p className="text-emerald-500 font-black text-[10px] uppercase animate-pulse">AI đang phân tích nến {scanInterval}m...</p>
             </div>
           ) : state.lastAnalysis ? (
             <SignalCard analysis={state.lastAnalysis} />
           ) : (
-            <div className="bg-slate-900/30 border border-dashed border-slate-800 rounded-3xl p-16 text-center text-slate-500"><p className="italic text-sm italic">Đang đợi nến đóng hoặc nhấn chuyển coin để phân tích lại.</p></div>
+            <div className="bg-slate-900/30 border border-dashed border-slate-800 rounded-3xl p-16 text-center text-slate-500"><p className="italic text-sm">Đang đợi nến đóng hoặc nhấn đổi coin...</p></div>
           )}
         </div>
       </div>

@@ -4,25 +4,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoSignal AI</title>
+    <title>ScalpPro AI - Crypto Hunter</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #0b0f19;
             color: #f8fafc;
             margin: 0;
+            overflow-x: hidden;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #334155;
         }
     </style>
-    <script>
-      // Shim cho process.env.API_KEY - Docker sẽ thay thế giá trị này lúc runtime
-      window.process = {
-        env: {
-          API_KEY: "AIzaSyCpyPu6zZAbj4ZVafQhXq_QzucoMoA2dU8"
-        }
-      };
-    </script>
 <script type="importmap">
 {
   "imports": {
