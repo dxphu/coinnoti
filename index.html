@@ -15,11 +15,11 @@
             margin: 0;
         }
     </style>
-    <!-- Shim cho process.env.API_KEY - Docker sẽ thay thế __API_KEY_PLACEHOLDER__ lúc runtime -->
     <script>
+      // Shim cho process.env.API_KEY - Docker sẽ thay thế giá trị này lúc runtime
       window.process = {
         env: {
-          API_KEY: "AIzaSyCpyPu6zZAbj4ZVafQhXq_QzucoMoA2dU8"
+          API_KEY: "__API_KEY_PLACEHOLDER__"
         }
       };
     </script>
