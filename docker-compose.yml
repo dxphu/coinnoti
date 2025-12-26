@@ -8,5 +8,5 @@ services:
       - "20000:20000"
     environment:
       # Thay Key thật của bạn vào đây
-      - API_KEY=AIzaSyADWfQXkQeleCdFu56oeHC3YD-xnWb2lMk
+      - API_KEY=AIzaSyCbCON46gLIXkRFOSbKREguGVUSTSjRrHE
     restart: always
