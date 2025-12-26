@@ -3,6 +3,7 @@ services:
   crypto-signal-ai:
     build: .
     container_name: crypto_ai_app
+    image: cryptosignal:latest
     ports:
       - "20000:80"
     environment:
