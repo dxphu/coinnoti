@@ -46,7 +46,6 @@ const App: React.FC = () => {
   const getNextCandleClose = () => {
     const now = new Date();
     const minutes = now.getMinutes();
-    // Khung 5 phút
     const nextFive = (Math.floor(minutes / 5) + 1) * 5;
     const nextClose = new Date(now);
     nextClose.setMinutes(nextFive, 0, 0);
@@ -56,21 +55,12 @@ const App: React.FC = () => {
   const sendTelegram = async (analysis: AnalysisResponse, symbol: string, price: number) => {
     if (!tgConfig.isEnabled || !tgConfig.botToken || !tgConfig.chatId) return;
     
-    // BỘ LỌC QUAN TRỌNG: Chỉ thông báo khi signal rõ ràng và độ tin cậy > 75%
+    // Lọc kèo độ tin cậy > 75%
     if (analysis.signal === 'NEUTRAL' || analysis.confidence <= 75) return;
 
-    // Tránh bắn trùng lặp trong cùng 1 nến 5p (300.000ms = 5 phút)
     const signalKey = `${symbol}_${analysis.signal}_${Math.floor(Date.now() / 300000)}`;
     if (lastSignalRef.current[symbol] === signalKey) return;
     lastSignalRef.current[symbol] = signalKey;
-
-    setSignalLogs(prev => [{
-      time: new Date().toLocaleTimeString(),
-      symbol,
-      signal: analysis.signal,
-      price,
-      confidence: analysis.confidence
-    }, ...prev].slice(0, 20));
 
     const emoji = analysis.signal === 'BUY' ? '🔥 KÈO MUA MẠNH (BUY)' : '💥 KÈO BÁN MẠNH (SELL)';
     const tradePlanText = analysis.tradePlan ? 
@@ -96,6 +86,14 @@ const App: React.FC = () => {
           parse_mode: 'Markdown'
         })
       });
+
+      setSignalLogs(prev => [{
+        time: new Date().toLocaleTimeString(),
+        symbol,
+        signal: analysis.signal,
+        price,
+        confidence: analysis.confidence
+      }, ...prev].slice(0, 20));
     } catch (e) {
       console.error("Telegram Error:", e);
     }
@@ -110,6 +108,7 @@ const App: React.FC = () => {
 
       const latestTime = klines[klines.length - 1].time;
       
+      // Nếu là nến mới hoặc chưa có phân tích cho coin này
       if (latestTime !== lastAnalyzedMap.current[symbol]) {
         const result = await analyzeMarket(symbol, klines);
         lastAnalyzedMap.current[symbol] = latestTime;
@@ -120,7 +119,8 @@ const App: React.FC = () => {
             lastAnalysis: result,
             price: ticker.price,
             change24h: ticker.change24h,
-            candles: klines
+            candles: klines,
+            loading: false
           }));
         }
         
@@ -128,6 +128,9 @@ const App: React.FC = () => {
       }
     } catch (e) {
       console.error(`Scan error for ${symbol}:`, e);
+      if (symbol === state.symbol) {
+        setState(prev => ({ ...prev, error: `Không tìm thấy coin ${symbol}`, loading: false }));
+      }
     }
   };
 
@@ -136,12 +139,13 @@ const App: React.FC = () => {
     setAnalyzing(true);
     for (const s of watchlist) {
       await scanSymbol(s);
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 1000));
     }
     setAnalyzing(false);
   }, [watchlist, state.symbol, analyzing]);
 
   const loadViewData = useCallback(async (symbol: string) => {
+    setState(prev => ({ ...prev, loading: true, error: null }));
     try {
       const [klines, ticker] = await Promise.all([
         fetchKlines(symbol, '5m'),
@@ -155,7 +159,7 @@ const App: React.FC = () => {
         loading: false
       }));
     } catch (e) {
-      setState(prev => ({ ...prev, loading: false, error: 'Lỗi kết nối' }));
+      setState(prev => ({ ...prev, loading: false, error: `Lỗi tải dữ liệu ${symbol}` }));
     }
   }, []);
 
@@ -188,14 +192,21 @@ const App: React.FC = () => {
   const addToWatchlist = () => {
     const sym = newSymbol.toUpperCase().trim().replace('USDT', '');
     if (sym && !watchlist.includes(sym)) {
-      setWatchlist([...watchlist, sym]);
+      setWatchlist(prev => [...prev, sym]);
       setNewSymbol('');
+      // Chuyển sang xem coin mới ngay lập tức
+      setState(prev => ({ ...prev, symbol: sym, loading: true, lastAnalysis: null }));
     }
   };
 
-  const removeFromWatchlist = (sym: string) => {
+  const removeFromWatchlist = (e: React.MouseEvent, sym: string) => {
+    e.stopPropagation();
     if (watchlist.length > 1) {
-      setWatchlist(watchlist.filter(s => s !== sym));
+      setWatchlist(prev => prev.filter(s => s !== sym));
+      if (state.symbol === sym) {
+        const nextSym = watchlist.find(s => s !== sym) || 'BTC';
+        setState(prev => ({ ...prev, symbol: nextSym, lastAnalysis: null }));
+      }
     }
   };
 
@@ -209,48 +220,59 @@ const App: React.FC = () => {
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-black text-white tracking-tight uppercase italic">
+            <h1 className="text-2xl font-black text-white tracking-tight uppercase italic leading-none">
               ScalpPro <span className="text-emerald-500">5M</span>
             </h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">High Confidence Scan (&gt;75%)</p>
+            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">High Accuracy Signal</p>
           </div>
         </div>
         
-        <div className="flex flex-wrap items-center gap-3 bg-slate-900/80 p-2 rounded-2xl border border-slate-800 w-full lg:w-auto">
-          <div className="flex items-center gap-2 px-2 border-r border-slate-800 mr-2">
+        <div className="flex flex-wrap items-center gap-3 bg-slate-900/50 p-2 rounded-2xl border border-slate-800 w-full lg:w-auto backdrop-blur-sm">
+          <div className="flex items-center gap-2 px-3 border-r border-slate-800 mr-1">
             <input 
               type="text" 
               value={newSymbol}
               onChange={(e) => setNewSymbol(e.target.value)}
-              placeholder="Coin (Vd: PEPE)"
-              className="bg-transparent text-xs font-bold outline-none w-24"
+              placeholder="Thêm Coin..."
+              className="bg-transparent text-xs font-bold outline-none w-20 md:w-28 text-emerald-400 placeholder:text-slate-600"
               onKeyDown={(e) => e.key === 'Enter' && addToWatchlist()}
             />
-            <button onClick={addToWatchlist} className="text-emerald-500 hover:text-emerald-400">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" strokeWidth="2" strokeLinecap="round"/></svg>
+            <button 
+              type="button"
+              onClick={addToWatchlist} 
+              className="text-emerald-500 hover:text-emerald-400 transition-colors p-1"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M12 4v16m8-8H4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
             {watchlist.map(sym => (
               <div key={sym} className="relative group">
                 <button
-                  onClick={() => setState(p => ({...p, symbol: sym}))}
-                  className={`px-3 py-2 rounded-xl text-[11px] font-black transition-all ${
-                    state.symbol === sym ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  type="button"
+                  onClick={() => setState(p => ({...p, symbol: sym, lastAnalysis: null}))}
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black transition-all duration-200 border ${
+                    state.symbol === sym 
+                      ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-900/20' 
+                      : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                   }`}
                 >
                   {sym}
                 </button>
                 <button 
-                  onClick={() => removeFromWatchlist(sym)}
-                  className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                  type="button"
+                  onClick={(e) => removeFromWatchlist(e, sym)}
+                  className="absolute -top-1.5 -right-1.5 bg-rose-500/90 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-600 shadow-lg z-10"
                 >✕</button>
               </div>
             ))}
           </div>
           <button 
+            type="button"
             onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded-xl border transition-all ${showSettings ? 'bg-emerald-600 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+            className={`p-2 rounded-xl border transition-all ${showSettings ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400'}`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -261,64 +283,77 @@ const App: React.FC = () => {
 
       {showSettings && (
         <div className="mb-8 p-6 bg-slate-900 border border-emerald-600/30 rounded-3xl animate-in zoom-in duration-300">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold text-emerald-400">Cấu hình Cảnh báo 5P</h3>
-            <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white">✕ Đóng</button>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-emerald-400 flex items-center gap-2">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              Cấu hình Telegram VIP
+            </h3>
+            <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white transition-colors">✕ Đóng</button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <p className="text-[10px] text-slate-500 font-bold uppercase">Bot Token</p>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Bot Token</p>
               <input 
                 type="password"
                 value={tgConfig.botToken}
                 onChange={(e) => setTgConfig({...tgConfig, botToken: e.target.value})}
-                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none focus:border-emerald-500/50"
+                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none focus:border-emerald-500/50 transition-all"
+                placeholder="Nhập Token từ BotFather..."
               />
             </div>
             <div className="space-y-2">
-              <p className="text-[10px] text-slate-500 font-bold uppercase">Chat ID</p>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Chat ID</p>
               <input 
                 type="text"
                 value={tgConfig.chatId}
                 onChange={(e) => setTgConfig({...tgConfig, chatId: e.target.value})}
-                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none focus:border-emerald-500/50"
+                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none focus:border-emerald-500/50 transition-all"
+                placeholder="Nhập ID người nhận/Group..."
               />
             </div>
-            <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800 md:col-span-2">
+            <div className="flex items-center gap-4 bg-slate-950 p-5 rounded-2xl border border-slate-800 md:col-span-2">
               <div className="flex-1">
-                <p className="text-sm font-bold">Lọc tín hiệu VIP lớn hơn (75%)</p>
-                <p className="text-xs text-slate-500">Chỉ gửi Telegram khi AI xác nhận nến 5p có độ tin cậy cực cao.</p>
+                <p className="text-sm font-black text-white">Chế độ lọc kèo tinh hoa (>75%)</p>
+                <p className="text-xs text-slate-500 mt-1">Hệ thống sẽ chỉ bắn tín hiệu lên Telegram khi AI cực kỳ tự tin về lệnh.</p>
               </div>
               <button 
+                type="button"
                 onClick={() => setTgConfig({...tgConfig, isEnabled: !tgConfig.isEnabled})}
-                className={`w-14 h-7 rounded-full relative transition-colors ${tgConfig.isEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}
+                className={`w-14 h-7 rounded-full relative transition-all duration-300 ${tgConfig.isEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}
               >
-                <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${tgConfig.isEnabled ? 'left-8' : 'left-1'}`} />
+                <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all duration-300 ${tgConfig.isEnabled ? 'left-8' : 'left-1'}`} />
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900/50 p-5 rounded-3xl border border-slate-800">
-           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Cặp đang xem</p>
-           <p className="text-2xl font-mono font-black text-white">{state.symbol}/USDT</p>
+      {state.error && (
+        <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl text-xs font-bold text-center">
+          ⚠️ {state.error}
         </div>
-        <div className="bg-slate-900/50 p-5 rounded-3xl border border-slate-800">
-           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Giá 5M</p>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Cặp hiện tại</p>
+           <p className="text-2xl font-mono font-black text-white tracking-tighter">{state.symbol}/USDT</p>
+        </div>
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Giá thời gian thực</p>
            <div className="flex items-baseline gap-2">
-             <span className="text-xl font-mono font-bold">${state.price.toLocaleString()}</span>
+             <span className="text-xl font-mono font-bold text-white">${state.price.toLocaleString()}</span>
            </div>
         </div>
-        <div className="bg-slate-900/50 p-5 rounded-3xl border border-slate-800">
-           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Nến 5p đóng sau</p>
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Quét nến tiếp theo</p>
            <p className="text-2xl font-mono font-bold text-emerald-400">{nextScanTime}</p>
         </div>
-        <div className="bg-slate-900/50 p-5 rounded-3xl border border-slate-800">
-           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Máy quét AI</p>
+        <div className="bg-slate-900/30 p-5 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
+           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Tiến độ Scanner</p>
            <p className={`text-sm font-bold uppercase flex items-center gap-2 ${analyzing ? 'text-amber-500' : 'text-emerald-500'}`}>
-             {analyzing ? 'Đang lọc kèo...' : 'Sẵn sàng'}
+             {analyzing && <span className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />}
+             {analyzing ? `Đang lọc ${watchlist.length} coin...` : 'Hệ thống Sẵn sàng'}
            </p>
         </div>
       </div>
@@ -327,45 +362,63 @@ const App: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           <Chart data={state.candles} analysis={state.lastAnalysis} />
           
-          <div className="bg-slate-900/50 rounded-3xl border border-slate-800 p-6">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-slate-500 mb-4">
-              Kèo VIP gần đây (&gt;75% Confidence)
+          <div className="bg-slate-900/30 rounded-3xl border border-slate-800/50 p-6 backdrop-blur-sm">
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex justify-between items-center">
+              Tín hiệu VIP đã lọc
+              <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Accuracy > 75%</span>
             </h3>
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
               {signalLogs.length > 0 ? signalLogs.map((log, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-slate-950/50 rounded-xl border border-slate-800">
-                  <div className="flex items-center gap-3">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-black ${log.signal === 'BUY' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-rose-500/20 text-rose-500'}`}>
-                      {log.signal} {log.confidence}%
-                    </span>
-                    <span className="font-bold text-sm text-white">{log.symbol}</span>
+                <div 
+                  key={i} 
+                  className="flex items-center justify-between p-4 bg-slate-950/40 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer group"
+                  onClick={() => setState(p => ({...p, symbol: log.symbol, lastAnalysis: null}))}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${log.signal === 'BUY' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                      {log.signal[0]}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-white">{log.symbol}</span>
+                        <span className="text-[10px] font-bold text-slate-500">{log.time}</span>
+                      </div>
+                      <p className={`text-[10px] font-black ${log.signal === 'BUY' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        CONFIDENCE: {log.confidence}%
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4 text-xs font-mono">
-                    <span className="text-slate-400">${log.price.toLocaleString()}</span>
-                    <span className="text-slate-600">{log.time}</span>
+                  <div className="text-right">
+                    <p className="text-xs font-mono font-bold text-white">${log.price.toLocaleString()}</p>
+                    <p className="text-[9px] text-slate-600 font-bold uppercase group-hover:text-emerald-500 transition-colors">Xem biểu đồ →</p>
                   </div>
                 </div>
               )) : (
-                <p className="text-center py-8 text-slate-600 text-sm italic">Đang lọc các cơ hội thắng lớn trên khung 5 phút...</p>
+                <div className="text-center py-12">
+                   <div className="w-12 h-12 border-2 border-slate-800 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
+                   <p className="text-slate-500 text-sm font-medium italic">Đang lọc cơ hội thắng lớn từ {watchlist.length} cặp tiền...</p>
+                </div>
               )}
             </div>
           </div>
         </div>
 
         <div className="space-y-6">
-          <h2 className="text-lg font-black text-white uppercase flex items-center gap-2">
-            <span className="w-2 h-6 bg-emerald-600 rounded-full" />
-            Chi tiết {state.symbol} (5M)
+          <h2 className="text-lg font-black text-white uppercase flex items-center gap-3">
+            <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+            Phân tích 5M: {state.symbol}
           </h2>
-          {analyzing ? (
-            <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-12 text-center animate-pulse">
-               <p className="text-emerald-400 font-bold text-sm uppercase tracking-tighter">Đang tính toán win-rate...</p>
+          {state.loading ? (
+            <div className="bg-slate-900/30 border border-slate-800 rounded-3xl p-16 text-center backdrop-blur-sm">
+               <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
+               <p className="text-emerald-500 font-black text-xs uppercase tracking-widest">Đang tải...</p>
             </div>
           ) : state.lastAnalysis ? (
             <SignalCard analysis={state.lastAnalysis} />
           ) : (
-            <div className="bg-slate-900/40 border border-dashed border-slate-800 rounded-3xl p-12 text-center text-slate-500 text-sm">
-              Chọn coin và đợi nến 5p đóng để nhận phân tích.
+            <div className="bg-slate-900/30 border border-dashed border-slate-800 rounded-3xl p-12 text-center text-slate-500 backdrop-blur-sm">
+              <p className="text-sm font-medium mb-2">Đang chờ quét tín hiệu mới</p>
+              <p className="text-[10px] uppercase font-bold text-slate-600">Nến 5p tiếp theo sẽ có phân tích</p>
             </div>
           )}
         </div>
