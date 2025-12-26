@@ -308,7 +308,7 @@ const App: React.FC = () => {
               <div className="flex-1 flex items-center gap-4 bg-slate-950 p-5 rounded-2xl border border-slate-800">
                 <div className="flex-1">
                   <p className="text-sm font-black text-white uppercase tracking-tight">Kích hoạt thông báo</p>
-                  <p className="text-[10px] text-slate-500 mt-1 font-bold">Chỉ bắn tín hiệu cực đẹp (Confidence > 75%) lên Telegram.</p>
+                  <p className="text-[10px] text-slate-500 mt-1 font-bold">Chỉ bắn tín hiệu cực đẹp (Confidence  75%) lên Telegram.</p>
                 </div>
                 <button 
                   type="button"
