@@ -61,7 +61,6 @@ const App: React.FC = () => {
     if (lastSignalRef.current === signalKey) return;
     lastSignalRef.current = signalKey;
 
-    // Lưu vào lịch sử hiển thị
     setSignalLogs(prev => [{
       time: new Date().toLocaleTimeString(),
       symbol,
@@ -70,16 +69,18 @@ const App: React.FC = () => {
     }, ...prev].slice(0, 10));
 
     const emoji = analysis.signal === 'BUY' ? '🟢 LỆNH MUA (BUY)' : '🔴 LỆNH BÁN (SELL)';
+    const tradePlanText = analysis.tradePlan ? 
+      `🎯 *Target (TP):* $${analysis.tradePlan.takeProfit.toLocaleString()}\n` +
+      `🛑 *Stop Loss (SL):* $${analysis.tradePlan.stopLoss.toLocaleString()}\n\n` : '';
+
     const text = `🚀 *TÍN HIỆU CRYPTO 15P*\n\n` +
                  `Cặp: *${symbol}/USDT*\n` +
                  `Hành động: *${emoji}*\n` +
-                 `Giá thị trường: *$${price.toLocaleString()}*\n` +
-                 `Độ tin cậy: *${analysis.confidence}%*\n` +
-                 `RSI: *${analysis.indicators.rsi.toFixed(1)}*\n\n` +
-                 `💡 *Phân tích AI:*\n${analysis.reasoning.map(r => `• ${r}`).join('\n')}\n\n` +
-                 `📉 Hỗ trợ: $${analysis.keyLevels.support.toLocaleString()}\n` +
-                 `📈 Kháng cự: $${analysis.keyLevels.resistance.toLocaleString()}\n\n` +
-                 `⚠️ _Ghi chú: Chỉ báo AI mang tính tham khảo._`;
+                 `Giá vào lệnh: *$${price.toLocaleString()}*\n\n` +
+                 tradePlanText +
+                 `📊 *Phân tích kỹ thuật:*\n${analysis.reasoning.map(r => `• ${r}`).join('\n')}\n\n` +
+                 `💡 Độ tin cậy: *${analysis.confidence}%* | RSI: *${analysis.indicators.rsi.toFixed(1)}*\n\n` +
+                 `⚠️ _Ghi chú: Luôn quản lý rủi ro và tuân thủ kỷ luật._`;
 
     try {
       await fetch(`https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`, {
@@ -128,7 +129,7 @@ const App: React.FC = () => {
     } catch (error) {
       setState(prev => ({ ...prev, loading: false, error: 'Lỗi API' }));
     }
-  }, [tgConfig, signalLogs]);
+  }, [tgConfig]);
 
   useEffect(() => {
     const timer = setInterval(() => {

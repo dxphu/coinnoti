@@ -18,6 +18,11 @@ export interface AnalysisResponse {
     support: number;
     resistance: number;
   };
+  tradePlan?: {
+    entry: number;
+    stopLoss: number;
+    takeProfit: number;
+  };
   indicators: {
     rsi: number;
     trend: string;

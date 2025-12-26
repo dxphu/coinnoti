@@ -23,37 +23,44 @@ const SignalCard: React.FC<SignalCardProps> = ({ analysis }) => {
     }
   };
 
-  const getSignalBadge = (signal: SignalType) => {
-    switch (signal) {
-      case 'BUY': return 'bg-emerald-500 text-white';
-      case 'SELL': return 'bg-rose-500 text-white';
-      default: return 'bg-amber-500 text-white';
-    }
-  };
-
   return (
     <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className={`p-6 rounded-2xl border ${getSignalColor(analysis.signal)}`}>
         <div className="flex justify-between items-start mb-4">
           <div>
-            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${getSignalBadge(analysis.signal)}`}>
+            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+              analysis.signal === 'BUY' ? 'bg-emerald-500' : analysis.signal === 'SELL' ? 'bg-rose-500' : 'bg-amber-500'
+            } text-white`}>
               TÍN HIỆU: {getSignalText(analysis.signal)}
             </span>
-            <h3 className="text-2xl font-bold mt-2">Độ tin cậy: {analysis.confidence}%</h3>
+            <h3 className="text-2xl font-black mt-2 text-white">Tin cậy: {analysis.confidence}%</h3>
           </div>
           <div className="text-right">
-            <p className="text-xs opacity-60 uppercase tracking-widest">Xu hướng</p>
-            <p className="font-semibold text-white">{analysis.indicators.trend}</p>
+            <p className="text-[10px] opacity-60 uppercase font-bold tracking-widest">Xu hướng</p>
+            <p className="font-bold text-white">{analysis.indicators.trend}</p>
           </div>
         </div>
 
+        {analysis.tradePlan && analysis.signal !== 'NEUTRAL' && (
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="bg-emerald-500/20 border border-emerald-500/30 p-3 rounded-xl">
+              <p className="text-[10px] text-emerald-400 uppercase font-black mb-1">Target (TP)</p>
+              <p className="text-xl font-mono font-black text-emerald-400">${analysis.tradePlan.takeProfit.toLocaleString()}</p>
+            </div>
+            <div className="bg-rose-500/20 border border-rose-500/30 p-3 rounded-xl">
+              <p className="text-[10px] text-rose-400 uppercase font-black mb-1">Cắt lỗ (SL)</p>
+              <p className="text-xl font-mono font-black text-rose-400">${analysis.tradePlan.stopLoss.toLocaleString()}</p>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
-          <p className="text-sm font-medium opacity-80 underline underline-offset-4 decoration-dotted">Lý do kỹ thuật (AI):</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-white/80">Phân tích kỹ thuật:</p>
           <ul className="space-y-2">
             {analysis.reasoning.map((reason, idx) => (
               <li key={idx} className="flex items-start gap-2 text-sm">
                 <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-current shrink-0" />
-                <span className="text-slate-200">{reason}</span>
+                <span className="text-slate-300">{reason}</span>
               </li>
             ))}
           </ul>
@@ -61,25 +68,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ analysis }) => {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-          <p className="text-xs text-slate-400 uppercase mb-1">Mức Hỗ Trợ</p>
-          <p className="text-emerald-400 font-mono text-lg">${analysis.keyLevels.support.toLocaleString()}</p>
+        <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+          <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Hỗ Trợ</p>
+          <p className="text-emerald-500 font-mono font-bold">${analysis.keyLevels.support.toLocaleString()}</p>
         </div>
-        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-          <p className="text-xs text-slate-400 uppercase mb-1">Mức Kháng Cự</p>
-          <p className="text-rose-400 font-mono text-lg">${analysis.keyLevels.resistance.toLocaleString()}</p>
-        </div>
-        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 col-span-2 flex justify-between items-center">
-          <div>
-            <p className="text-xs text-slate-400 uppercase mb-1">Chỉ số RSI</p>
-            <p className="text-slate-200 font-bold">{analysis.indicators.rsi.toFixed(2)}</p>
-          </div>
-          <div className="h-2 flex-1 mx-4 bg-slate-700 rounded-full overflow-hidden">
-             <div 
-               className={`h-full ${analysis.indicators.rsi > 70 ? 'bg-rose-500' : analysis.indicators.rsi < 30 ? 'bg-emerald-500' : 'bg-blue-500'}`} 
-               style={{ width: `${analysis.indicators.rsi}%` }} 
-             />
-          </div>
+        <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+          <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Kháng Cự</p>
+          <p className="text-rose-500 font-mono font-bold">${analysis.keyLevels.resistance.toLocaleString()}</p>
         </div>
       </div>
     </div>

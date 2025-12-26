@@ -3,11 +3,10 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { CandleData, AnalysisResponse } from "../types";
 
 export const analyzeMarket = async (symbol: string, candles: CandleData[]): Promise<AnalysisResponse> => {
-  // Tuân thủ hướng dẫn: Sử dụng trực tiếp từ process.env.API_KEY
-  const apiKey = 'AIzaSyCpyPu6zZAbj4ZVafQhXq_QzucoMoA2dU8';
+  const apiKey = process.env.API_KEY || 'AIzaSyCpyPu6zZAbj4ZVafQhXq_QzucoMoA2dU8';
   
   if (!apiKey || apiKey === "__API_KEY_PLACEHOLDER__") {
-    throw new Error("API_KEY chưa được cấu hình. Vui lòng kiểm tra môi trường.");
+    throw new Error("API_KEY chưa được cấu hình.");
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -24,17 +23,18 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[]): Prom
   const prompt = `Bạn là một chuyên gia Scalping Crypto trên khung 15 phút. 
   Phân tích cặp ${symbol}/USDT với dữ liệu 50 nến gần nhất: ${JSON.stringify(relevantCandles)}
   
-  YÊU CẦU ĐẶC BIỆT:
-  - Tập trung tìm kiếm các tín hiệu "Mua khi giá thấp": Kiểm tra xem giá có đang ở vùng Hỗ trợ quan trọng hoặc RSI < 30 (quá bán) không.
-  - Kiểm tra các mô hình nến đảo chiều (Pinbar, Bullish Engulfing) tại vùng giá thấp.
-  - Chỉ đưa ra BUY khi có sự hội tụ của ít nhất 2 yếu tố kỹ thuật.
+  YÊU CẦU:
+  - Nếu signal là BUY hoặc SELL, bạn PHẢI cung cấp một kế hoạch giao dịch (tradePlan) cụ thể.
+  - Stop Loss (SL) phải đặt ở mức an toàn (ví dụ: dưới hỗ trợ gần nhất cho lệnh BUY).
+  - Take Profit (TP) phải đảm bảo tỷ lệ R:R (Risk:Reward) tối thiểu là 1:1.5.
   
   TRẢ VỀ JSON:
   1. signal: BUY, SELL hoặc NEUTRAL.
   2. confidence: % độ tin cậy.
-  3. reasoning: Danh sách 3-4 lý do kỹ thuật (Tiếng Việt).
+  3. reasoning: 3-4 lý do kỹ thuật.
   4. keyLevels: { support: số, resistance: số }.
-  5. indicators: { rsi: số, trend: "Tăng/Giảm/Sideway" }.`;
+  5. tradePlan: { entry: số, stopLoss: số, takeProfit: số } (chỉ khi signal != NEUTRAL).
+  6. indicators: { rsi: số, trend: "Tăng/Giảm/Sideway" }.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -55,6 +55,14 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[]): Prom
                 resistance: { type: Type.NUMBER }
               },
               required: ["support", "resistance"]
+            },
+            tradePlan: {
+              type: Type.OBJECT,
+              properties: {
+                entry: { type: Type.NUMBER },
+                stopLoss: { type: Type.NUMBER },
+                takeProfit: { type: Type.NUMBER }
+              }
             },
             indicators: {
               type: Type.OBJECT,
