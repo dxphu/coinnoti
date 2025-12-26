@@ -11,7 +11,7 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[]): Prom
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
   
-  const relevantCandles = candles.slice(-50).map(c => ({
+  const relevantCandles = candles.slice(-60).map(c => ({
     t: new Date(c.time).toLocaleTimeString('vi-VN'),
     o: c.open,
     h: c.high,
@@ -20,20 +20,20 @@ export const analyzeMarket = async (symbol: string, candles: CandleData[]): Prom
     v: Math.round(c.volume)
   }));
 
-  const prompt = `Bạn là một chuyên gia Scalping Crypto trên khung 15 phút. 
-  Phân tích cặp ${symbol}/USDT với dữ liệu 50 nến gần nhất: ${JSON.stringify(relevantCandles)}
+  const prompt = `Bạn là một chuyên gia Scalping siêu hạng trên khung 5 phút (5M).
+  Phân tích cặp ${symbol}/USDT với 60 nến 5 phút gần nhất: ${JSON.stringify(relevantCandles)}
   
-  YÊU CẦU:
-  - Nếu signal là BUY hoặc SELL, bạn PHẢI cung cấp một kế hoạch giao dịch (tradePlan) cụ thể.
-  - Stop Loss (SL) phải đặt ở mức an toàn (ví dụ: dưới hỗ trợ gần nhất cho lệnh BUY).
-  - Take Profit (TP) phải đảm bảo tỷ lệ R:R (Risk:Reward) tối thiểu là 1:1.5.
-  
-  TRẢ VỀ JSON:
+  CHIẾN THUẬT:
+  - Tập trung vào Price Action, RSI và các vùng quá mua/quá bán trên khung ngắn.
+  - Chỉ đưa ra độ tin cậy (confidence) trên 75% nếu các chỉ báo hội tụ mạnh (Ví dụ: RSI phân kỳ + Chạm hỗ trợ mạnh + Nến đảo chiều).
+  - Khung 5 phút biến động nhanh, hãy ưu tiên Stop Loss ngắn và Take Profit nhanh.
+
+  YÊU CẦU TRẢ VỀ JSON:
   1. signal: BUY, SELL hoặc NEUTRAL.
-  2. confidence: % độ tin cậy.
-  3. reasoning: 3-4 lý do kỹ thuật.
+  2. confidence: % độ tin cậy (Hãy khắt khe, chỉ >75% khi thực sự đẹp).
+  3. reasoning: 3 lý do kỹ thuật ngắn gọn.
   4. keyLevels: { support: số, resistance: số }.
-  5. tradePlan: { entry: số, stopLoss: số, takeProfit: số } (chỉ khi signal != NEUTRAL).
+  5. tradePlan: { entry: số, stopLoss: số, takeProfit: số }.
   6. indicators: { rsi: số, trend: "Tăng/Giảm/Sideway" }.`;
 
   try {

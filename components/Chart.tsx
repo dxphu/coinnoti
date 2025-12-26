@@ -26,11 +26,11 @@ const CustomTooltip = ({ active, payload }: any) => {
           {new Date(data.time).toLocaleString('vi-VN')}
         </p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-          <p className="text-slate-400 text-[10px] uppercase">Đóng cửa</p>
+          <p className="text-slate-400 text-[10px] uppercase">Đóng</p>
           <p className="text-white font-mono font-bold text-xs text-right">${data.close.toLocaleString()}</p>
-          <p className="text-slate-400 text-[10px] uppercase">Cao nhất</p>
+          <p className="text-slate-400 text-[10px] uppercase">Cao</p>
           <p className="text-emerald-500 font-mono font-bold text-xs text-right">${data.high.toLocaleString()}</p>
-          <p className="text-slate-400 text-[10px] uppercase">Thấp nhất</p>
+          <p className="text-slate-400 text-[10px] uppercase">Thấp</p>
           <p className="text-rose-500 font-mono font-bold text-xs text-right">${data.low.toLocaleString()}</p>
         </div>
       </div>
@@ -45,15 +45,14 @@ const Chart: React.FC<ChartProps> = ({ data, analysis }) => {
     formattedTime: new Date(c.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }));
 
-  const prices = data.map(d => d.close);
-  const minPrice = Math.min(...data.map(d => d.low)) * 0.998;
-  const maxPrice = Math.max(...data.map(d => d.high)) * 1.002;
+  const minPrice = Math.min(...data.map(d => d.low)) * 0.999;
+  const maxPrice = Math.max(...data.map(d => d.high)) * 1.001;
 
   return (
     <div className="h-[450px] w-full bg-slate-950/30 rounded-3xl p-6 border border-slate-900 shadow-inner overflow-hidden relative">
       <div className="absolute top-6 left-8 z-10">
          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-900 px-2 py-0.5 rounded border border-slate-800">Candlestick 15m</span>
+            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Scalping 5m</span>
          </div>
       </div>
       
@@ -61,8 +60,8 @@ const Chart: React.FC<ChartProps> = ({ data, analysis }) => {
         <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/>
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
+              <stop offset="0%" stopColor="#10b981" stopOpacity={0.2}/>
+              <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} strokeOpacity={0.3} />
@@ -72,39 +71,22 @@ const Chart: React.FC<ChartProps> = ({ data, analysis }) => {
             fontSize={9} 
             tickLine={false} 
             axisLine={false}
-            interval={Math.floor(chartData.length / 8)}
-            padding={{ left: 10, right: 10 }}
+            interval={Math.floor(chartData.length / 10)}
           />
-          <YAxis 
-            domain={[minPrice, maxPrice]}
-            hide
-          />
+          <YAxis domain={[minPrice, maxPrice]} hide />
           <Tooltip content={<CustomTooltip />} />
           <Area 
-            type="step" 
+            type="monotone" 
             dataKey="close" 
-            stroke="#3b82f6" 
+            stroke="#10b981" 
             strokeWidth={2}
             fillOpacity={1} 
             fill="url(#colorPrice)" 
-            animationDuration={1500}
           />
           {analysis && (
             <>
-              <ReferenceLine 
-                y={analysis.keyLevels.support} 
-                stroke="#10b981" 
-                strokeDasharray="4 4"
-                strokeWidth={1}
-                label={{ position: 'right', value: 'Support', fill: '#10b981', fontSize: 10, fontWeight: 'bold' }} 
-              />
-              <ReferenceLine 
-                y={analysis.keyLevels.resistance} 
-                stroke="#ef4444" 
-                strokeDasharray="4 4"
-                strokeWidth={1}
-                label={{ position: 'right', value: 'Resistance', fill: '#ef4444', fontSize: 10, fontWeight: 'bold' }} 
-              />
+              <ReferenceLine y={analysis.keyLevels.support} stroke="#10b981" strokeDasharray="3 3" />
+              <ReferenceLine y={analysis.keyLevels.resistance} stroke="#ef4444" strokeDasharray="3 3" />
             </>
           )}
         </AreaChart>
